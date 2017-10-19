@@ -232,6 +232,12 @@ get_ref (BuilderCache *self, const char *stage)
   return g_string_free (s, FALSE);
 }
 
+static char *
+get_new_ref_from_ref (const char *ref)
+{
+  return g_strdup_printf ("%s___new", ref);
+}
+
 gboolean
 builder_cache_open (BuilderCache *self,
                     GError      **error)
@@ -540,6 +546,7 @@ builder_cache_commit (BuilderCache *self,
   g_autofree char *new_commit_checksum = NULL;
   gboolean res = FALSE;
   g_autofree char *ref = NULL;
+  g_autofree char *new_ref = NULL;
   g_autoptr(GFile) last_root = NULL;
   g_autoptr(GFile) new_root = NULL;
   g_autoptr(GPtrArray) changes = NULL;
@@ -604,6 +611,9 @@ builder_cache_commit (BuilderCache *self,
                                  OSTREE_REPO_FILE (new_root),
                                  &new_commit_checksum, NULL, error))
     goto out;
+
+  new_ref = get_new_ref_from_ref (ref);
+  ostree_repo_transaction_set_ref (self->repo, NULL, new_ref, new_commit_checksum);
 
   if (!ostree_repo_commit_transaction (self->repo, NULL, NULL, error))
     goto out;
@@ -1190,6 +1200,7 @@ builder_gc (BuilderCache *self,
     {
       const char *unused_stage = (const char *) key;
       g_autofree char *unused_ref = get_ref (self, unused_stage);
+      g_autofree char *new_ref = get_new_ref_from_ref (unused_ref);
 
       g_debug ("Removing unused ref %s", unused_ref);
 
@@ -1199,6 +1210,13 @@ builder_gc (BuilderCache *self,
                                           NULL,
                                           NULL, error))
         return FALSE;
+
+      /* Don't return error here in case new_ref doesn't exist (old cache) */
+      ostree_repo_set_ref_immediate (self->repo,
+                                     NULL,
+                                     new_ref,
+                                     NULL,
+                                     NULL, NULL);
     }
 
   g_print ("Pruning cache\n");
