@@ -49,6 +49,8 @@ struct BuilderCache
   char       *current_checksum;
   OstreeRepo *repo;
   gboolean    disabled;
+  gboolean    enable_sloppy;
+  gboolean    cache_is_sloppy;
   OstreeRepoDevInoCache *devino_to_csum_cache;
 };
 
@@ -238,6 +240,12 @@ get_new_ref_from_ref (const char *ref)
   return g_strdup_printf ("%s___new", ref);
 }
 
+static char *
+get_sloppy_ref_from_ref (const char *ref)
+{
+  return g_strdup_printf ("%s___sloppy", ref);
+}
+
 gboolean
 builder_cache_open (BuilderCache *self,
                     GError      **error)
@@ -301,24 +309,11 @@ builder_cache_open (BuilderCache *self,
 }
 
 static gboolean
-builder_cache_checkout (BuilderCache *self, const char *commit, gboolean delete_dir, GError **error)
+do_checkout (BuilderCache *self, const char *commit, GError **error)
 {
   g_autoptr(GError) my_error = NULL;
   OstreeRepoCheckoutMode mode = OSTREE_REPO_CHECKOUT_MODE_NONE;
   OstreeRepoCheckoutAtOptions options = { 0, };
-
-  if (delete_dir)
-    {
-      if (!g_file_delete (self->app_dir, NULL, &my_error) &&
-          !g_error_matches (my_error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
-        {
-          g_propagate_error (error, g_steal_pointer (&my_error));
-          return FALSE;
-        }
-
-      if (!flatpak_mkdir_p (self->app_dir, NULL, error))
-        return FALSE;
-    }
 
   /* If rofiles-fuse is disabled, we check out without user mode, not
      necessarily because we care about uids not owned by the user
@@ -347,6 +342,25 @@ builder_cache_checkout (BuilderCache *self, const char *commit, gboolean delete_
     return FALSE;
 
   return TRUE;
+}
+
+static gboolean
+builder_cache_checkout (BuilderCache *self, const char *commit, gboolean delete_dir, GError **error)
+{
+  if (delete_dir)
+    {
+      if (!g_file_delete (self->app_dir, NULL, &my_error) &&
+          !g_error_matches (my_error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
+        {
+          g_propagate_error (error, g_steal_pointer (&my_error));
+          return FALSE;
+        }
+
+      if (!flatpak_mkdir_p (self->app_dir, NULL, error))
+        return FALSE;
+    }
+
+  return do_checkout (self, commit, error);
 }
 
 gboolean
@@ -379,12 +393,39 @@ builder_cache_get_current_ref (BuilderCache *self)
   return get_ref (self, self->stage);
 }
 
+static char *
+builder_cache_get_checksum_for_ref (BuilderCache *self, const char *ref, char **commit_out)
+{
+  g_autofree char *commit = NULL;
+  g_autoptr(GVariant) variant = NULL;
+  const gchar *subject;
+
+  if (!ostree_repo_resolve_rev (self->repo, ref, FALSE, &commit, NULL))
+    return NULL;
+
+  if (!ostree_repo_load_variant (self->repo, OSTREE_OBJECT_TYPE_COMMIT, commit,
+                                 &variant, NULL))
+    return NULL;
+
+  g_variant_get (variant, "(a{sv}aya(say)&s&stayay)", NULL, NULL, NULL,
+                 &subject, NULL, NULL, NULL, NULL);
+
+  *commit_out = g_steal_pointer (&commit);
+  return g_strdup (subject);
+
+}
+
 gboolean
 builder_cache_lookup (BuilderCache *self,
                       const char   *stage)
 {
   g_autofree char *commit = NULL;
+  g_autofree char *precise_new_commit = NULL;
+  g_autofree char *precise_commit = NULL;
+  g_autofree char *precise_ref = NULL;
+  g_autofree char *precise_cache_checksum = NULL;
   g_autofree char *ref = NULL;
+  g_autoptr(GVariant) variant = NULL;
 
   g_free (self->stage);
   self->stage = g_strdup (stage);
@@ -393,38 +434,84 @@ builder_cache_lookup (BuilderCache *self,
 
   g_free (self->current_checksum);
   self->current_checksum = g_strdup (g_checksum_get_string (self->checksum));
+  self->current_checksum_is_sloppy = FALSE;
 
   /* Reset the checksum, but feed it previous checksum so we chain it */
   g_checksum_reset (self->checksum);
   builder_cache_checksum_str (self, self->current_checksum);
 
+  precise_ref = builder_cache_get_current_ref (self);
+  precise_cache_checksum = builder_cache_get_checksum_for_ref (self, precise_ref, &precise_commit);
+
   if (self->disabled)
-    return FALSE;
-
-  ref = builder_cache_get_current_ref (self);
-  if (!ostree_repo_resolve_rev (self->repo, ref, TRUE, &commit, NULL))
-    goto checkout;
-
-
-  if (commit != NULL)
     {
-      g_autoptr(GVariant) variant = NULL;
-      const gchar *subject;
+      if (self->cache_is_sloppy)
+        {
+          g_autofree char *precise_new_ref = get_new_ref_from_ref (precise_ref);
+          g_autofree char *sloppy_ref = get_sloppy_ref_from_ref (precise_ref);
+          g_autofree char *sloppy_new_ref = get_sloppy_ref_from_ref (sloppy_ref);
+          g_autofree char *sloppy_new_commit = NULL;
 
-      if (!ostree_repo_load_variant (self->repo, OSTREE_OBJECT_TYPE_COMMIT, commit,
-                                     &variant, NULL))
-        goto checkout;
+          ostree_repo_resolve_rev (self->repo, precise_new_ref, FALSE, &precise_new_commit, NULL);
+          if (precise_cache_checksum &&
+              strcmp (precise_cache_checksum, self->current_checksum) == 0 &&
+              precise_new_commit)
+            {
+              g_autoptr(GError) my_error = NULL;
+              if (!do_checkout (self, commit, &my_error))
+                g_error ("Failed to check out cache: %s", my_error->message);
 
-      g_variant_get (variant, "(a{sv}aya(say)&s&stayay)", NULL, NULL, NULL,
-                     &subject, NULL, NULL, NULL, NULL);
+              /* remove from cache  */
 
-      if (strcmp (subject, self->current_checksum) == 0)
+              g_checksum_reset (self->checksum);
+              builder_cache_checksum_str (self, precise_cache_checksum);
+
+              return TRUE;
+            }
+        }
+
+      return FALSE;
+    }
+
+  if (!self->cache_is_sloppy &&
+      strcmp (precise_cache_checksum, self->current_checksum) == 0)
+    {
+      g_free (self->last_parent);
+      self->last_parent = g_steal_pointer (&precise_commit);
+
+      /* Precise cache hit */
+      return TRUE;
+    }
+
+  if (self->enable_sloppy &&
+      (self->cache_is_sloppy || precise_commit != NULL))
+    {
+      g_autofree char *sloppy_ref = get_sloppy_ref_from_ref (precise_ref);
+      g_autofree char *sloppy_commit = NULL;
+      g_autofree char *sloppy_cache_checksum = NULL;
+
+      /* This stage, and all after will be sloppy */
+      self->cache_is_sloppy = TRUE;
+
+      if (precise_cache_checksum)
+        {
+          /* We have a real cached checksum for this stage, pretend
+             we built it, so that we can reuse other cache stages */
+          g_checksum_reset (self->checksum);
+          builder_cache_checksum_str (self, precise_cache_checksum);
+        }
+
+      sloppy_cache_checksum = builder_cache_get_checksum_for_ref (sloppy_precise_ref, &sloppy_commit);
+      if (sloppy_cache_checksum && strcmp (sloppy_cache_checksum, self->current_checksum) == 0)
         {
           g_free (self->last_parent);
-          self->last_parent = g_steal_pointer (&commit);
+          self->last_parent = g_steal_pointer (&sloppy_commit);
 
+          g_print ("Sloppy cache hit stage %s\n", stage);
           return TRUE;
         }
+
+      g_print ("Sloppy cache miss for stage %s\n", stage);
     }
 
 checkout:
@@ -545,8 +632,8 @@ builder_cache_commit (BuilderCache *self,
   g_autofree char *commit_checksum = NULL;
   g_autofree char *new_commit_checksum = NULL;
   gboolean res = FALSE;
+  g_autofree char *precise_ref = NULL;
   g_autofree char *ref = NULL;
-  g_autofree char *new_ref = NULL;
   g_autoptr(GFile) last_root = NULL;
   g_autoptr(GFile) new_root = NULL;
   g_autoptr(GPtrArray) changes = NULL;
@@ -594,7 +681,12 @@ builder_cache_commit (BuilderCache *self,
                                  &commit_checksum, NULL, error))
     goto out;
 
-  ref = builder_cache_get_current_ref (self);
+  precise_ref = builder_cache_get_current_ref (self);
+  if (self->cache_is_sloppy)
+    ref = get_sloppy_ref_from_ref (old);
+  else
+    ref = g_strdup (precise_ref);
+
   ostree_repo_transaction_set_ref (self->repo, NULL, ref, commit_checksum);
 
   if (self->last_parent &&
@@ -1183,6 +1275,13 @@ void
 builder_cache_disable_lookups (BuilderCache *self)
 {
   self->disabled = TRUE;
+}
+
+void
+builder_cache_set_sloppy (BuilderCache *self,
+                          gboolean sloppy)
+{
+  self->enable_sloppy = sloppy;
 }
 
 gboolean

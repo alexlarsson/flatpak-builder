@@ -38,6 +38,7 @@ static gboolean opt_verbose;
 static gboolean opt_version;
 static gboolean opt_run;
 static gboolean opt_disable_cache;
+static gboolean opt_sloppy_cache;
 static gboolean opt_disable_rofiles;
 static gboolean opt_download_only;
 static gboolean opt_bundle_sources;
@@ -85,6 +86,7 @@ static GOptionEntry entries[] = {
   { "run", 0, 0, G_OPTION_ARG_NONE, &opt_run, "Run a command in the build directory (see --run --help)", NULL },
   { "ccache", 0, 0, G_OPTION_ARG_NONE, &opt_ccache, "Use ccache", NULL },
   { "disable-cache", 0, 0, G_OPTION_ARG_NONE, &opt_disable_cache, "Disable cache lookups", NULL },
+  { "sloppy-cache", 0, 0, G_OPTION_ARG_NONE, &opt_sloppy_cache, "Sloppy cache lookups", NULL },
   { "disable-rofiles-fuse", 0, 0, G_OPTION_ARG_NONE, &opt_disable_rofiles, "Disable rofiles-fuse use", NULL },
   { "disable-download", 0, 0, G_OPTION_ARG_NONE, &opt_disable_download, "Don't download any new sources", NULL },
   { "disable-updates", 0, 0, G_OPTION_ARG_NONE, &opt_disable_updates, "Only download missing sources, never update to latest vcs version", NULL },
@@ -641,6 +643,9 @@ main (int    argc,
 
   if (opt_disable_cache) /* This disables *lookups*, but we still build the cache */
     builder_cache_disable_lookups (cache);
+
+  if (opt_sloppy_cache) /* This disables *lookups*, but we still build the cache */
+    builder_cache_set_sloppy (cache, TRUE);
 
   builder_manifest_checksum (manifest, cache, build_context);
 
