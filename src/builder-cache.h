@@ -39,6 +39,7 @@ BuilderCache *builder_cache_new (BuilderContext *context,
                                  GFile      *app_dir,
                                  const char *branch);
 void          builder_cache_disable_lookups (BuilderCache *self);
+void          builder_cache_disable_writes (BuilderCache *self);
 gboolean      builder_cache_open (BuilderCache *self,
                                   GError      **error);
 GChecksum *   builder_cache_get_checksum (BuilderCache *self);

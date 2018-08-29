@@ -36,6 +36,15 @@
 #include "builder-cache.h"
 #include "builder-context.h"
 
+typedef struct _BuilderFileData BuilderFileData;
+
+struct _BuilderFileData
+{
+  char *name;
+  GFileInfo *info;
+  BuilderFileData **children;
+};
+
 struct BuilderCache
 {
   GObject     parent;
@@ -46,9 +55,11 @@ struct BuilderCache
   char       *stage;
   GHashTable *unused_stages;
   char       *last_parent;
+  BuilderFileData *last_file_data;
   char       *current_checksum;
   OstreeRepo *repo;
   gboolean    disabled;
+  gboolean    disable_writes;
   OstreeRepoDevInoCache *devino_to_csum_cache;
 };
 
@@ -76,6 +87,179 @@ static GPtrArray   *builder_cache_get_changes_to (BuilderCache *self,
                                                   GError      **error);
 
 
+
+static void
+builder_file_data_free (BuilderFileData *data)
+{
+  int i;
+  if (data)
+    {
+      g_free (data->name);
+      g_clear_object (&data->info);
+      if (data->children)
+        {
+          for (i = 0; data->children[i] != NULL; i++)
+            builder_file_data_free (data->children[i]);
+          g_free (data->children);
+        }
+      g_free (data);
+    }
+}
+
+static gint
+builder_file_data_compare (const BuilderFileData *a,
+                           const BuilderFileData *b)
+{
+  return g_strcmp0 (a->name, b->name);
+}
+
+static BuilderFileData *
+scan_file_data (GFile *file,
+                GFileInfo *info,
+                GCancellable  *cancellable,
+                GError **error)
+{
+  g_autoptr(GFileInfo) query_info = NULL;
+  g_autoptr(GPtrArray) children = NULL;
+  BuilderFileData *data;
+
+  if (info == NULL)
+    {
+      query_info = g_file_query_info (file, OSTREE_GIO_FAST_QUERYINFO,
+                                G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,
+                                cancellable,
+                                error);
+      if (query_info == NULL)
+        return NULL;
+      info = query_info;
+    }
+
+  if (g_file_info_get_file_type (info) == G_FILE_TYPE_DIRECTORY)
+    {
+      g_autoptr(GFileEnumerator) dir_enum = NULL;
+      g_autoptr(GFileInfo) child_info = NULL;
+      GError *temp_error = NULL;
+
+      children = g_ptr_array_new_with_free_func ((GDestroyNotify)builder_file_data_free);
+
+      dir_enum = g_file_enumerate_children (file, OSTREE_GIO_FAST_QUERYINFO,
+                                            G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,
+                                            cancellable, error);
+      if (!dir_enum)
+        return NULL;
+
+      while ((child_info = g_file_enumerator_next_file (dir_enum, cancellable, &temp_error)) != NULL)
+        {
+          const char *child_name;
+          g_autoptr(GFile) child = NULL;
+          BuilderFileData *child_data;
+
+          child_name = g_file_info_get_name (child_info);
+          child = g_file_get_child (file, child_name);
+
+          child_data = scan_file_data (child, child_info, cancellable, error);
+          if (child_data == NULL)
+            return NULL;
+
+          child_data->name = g_strdup (child_name);
+          g_ptr_array_add (children, child_data);
+
+          g_clear_object (&child_info);
+        }
+
+      if (temp_error != NULL)
+        {
+          g_propagate_error (error, temp_error);
+          return NULL;
+        }
+
+      g_ptr_array_sort (children, (GCompareFunc)builder_file_data_compare);
+      g_ptr_array_add (children, NULL);
+    }
+
+  data = g_new0 (BuilderFileData, 1);
+  data->info = g_object_ref (info);
+  if (children)
+    data->children = (BuilderFileData **)g_ptr_array_free (g_steal_pointer (&children), FALSE);
+  return data;
+}
+
+static gboolean
+file_changed (GFileInfo *old,
+              GFileInfo *new)
+{
+  GTimeVal new_mtime, old_mtime;
+
+  if (g_file_info_get_file_type (old) != g_file_info_get_file_type (new))
+    return TRUE;
+
+  if (g_file_info_get_size (old) != g_file_info_get_size (new))
+    return TRUE;
+
+  g_file_info_get_modification_time (new, &new_mtime);
+  g_file_info_get_modification_time (old, &old_mtime);
+  if (new_mtime.tv_sec != old_mtime.tv_sec ||
+      new_mtime.tv_usec != old_mtime.tv_usec)
+    return TRUE;
+
+  if (g_strcmp0 (g_file_info_get_symlink_target (new),
+                 g_file_info_get_symlink_target (old)) != 0)
+    return TRUE;
+
+  if (g_file_info_get_attribute_uint64 (new, G_FILE_ATTRIBUTE_UNIX_INODE) !=
+      g_file_info_get_attribute_uint64 (old, G_FILE_ATTRIBUTE_UNIX_INODE))
+    return TRUE;
+
+  if (g_file_info_get_attribute_uint32 (new, G_FILE_ATTRIBUTE_UNIX_MODE) !=
+      g_file_info_get_attribute_uint32 (old, G_FILE_ATTRIBUTE_UNIX_MODE))
+    return TRUE;
+
+  return FALSE;
+}
+
+static void
+diff_file_data (const char *path,
+                BuilderFileData *old,
+                BuilderFileData *new,
+                GPtrArray      *changed_paths)
+{
+  GFileType new_type = g_file_info_get_file_type (new->info);
+  int i_old, i_new;
+
+  if (new_type == G_FILE_TYPE_DIRECTORY)
+    {
+      i_old = 0;
+      for (i_new = 0; new->children[i_new] != NULL; i_new++)
+        {
+          BuilderFileData *new_child = new->children[i_new];
+          BuilderFileData *old_child = NULL;
+          g_autofree char *path_child;
+          const char *new_name = new->children[i_new]->name;
+
+          if (old != NULL && old->children != NULL)
+            {
+              while (old->children[i_old] != NULL &&
+                     strcmp (old->children[i_old]->name, new_name) < 0)
+                i_old++;
+
+              if (strcmp (old->children[i_old]->name, new_name) == 0)
+                old_child = old->children[i_old];
+            }
+
+          path_child = g_build_filename (path, new_name, NULL);
+
+          diff_file_data (path_child, old_child, new_child, changed_paths);
+        }
+    }
+  else
+    {
+      if (old == NULL || file_changed (old->info, new->info))
+        {
+          g_ptr_array_add (changed_paths, g_strdup (path));
+        }
+    }
+}
+
 static void
 builder_cache_finalize (GObject *object)
 {
@@ -87,6 +271,7 @@ builder_cache_finalize (GObject *object)
   g_checksum_free (self->checksum);
   g_free (self->branch);
   g_free (self->last_parent);
+  builder_file_data_free (self->last_file_data);
   g_free (self->stage);
   g_free (self->current_checksum);
   if (self->unused_stages)
@@ -239,6 +424,9 @@ builder_cache_open (BuilderCache *self,
   g_autoptr(GKeyFile) config = NULL;
   g_autofree char *old_mfsp = NULL;
 
+  if (self->disable_writes)
+    return TRUE;
+
   self->repo = ostree_repo_new (builder_context_get_cache_dir (self->context));
 
   if (!g_file_query_exists (builder_context_get_cache_dir (self->context), NULL))
@@ -380,7 +568,8 @@ builder_cache_lookup (BuilderCache *self,
   g_free (self->stage);
   self->stage = g_strdup (stage);
 
-  g_hash_table_remove (self->unused_stages, stage);
+  if (self->unused_stages)
+    g_hash_table_remove (self->unused_stages, stage);
 
   g_free (self->current_checksum);
   self->current_checksum = g_strdup (g_checksum_get_string (self->checksum));
@@ -390,7 +579,18 @@ builder_cache_lookup (BuilderCache *self,
   builder_cache_checksum_str (self, self->current_checksum);
 
   if (self->disabled)
-    return FALSE;
+    {
+      if (self->disable_writes)
+        {
+          g_autoptr(GError) tmp_error = NULL;
+          builder_file_data_free (self->last_file_data);
+          self->last_file_data = scan_file_data (self->app_dir, NULL, NULL, &tmp_error);
+
+          if (self->last_file_data == NULL)
+            g_printerr ("Failed to scan file data: %s\n", tmp_error->message);
+        }
+      return FALSE;
+    }
 
   ref = builder_cache_get_current_ref (self);
   if (!ostree_repo_resolve_rev (self->repo, ref, TRUE, &commit, NULL))
@@ -579,6 +779,9 @@ builder_cache_commit (BuilderCache *self,
   g_autoptr(GPtrArray) removals = NULL;
   g_autoptr(GVariantDict) metadata_dict = NULL;
   g_autoptr(GVariant) metadata = NULL;
+
+  if (self->disable_writes)
+    return TRUE;
 
   g_print ("Committing stage %s to cache\n", self->stage);
 
@@ -968,27 +1171,40 @@ builder_cache_get_outstanding_changes (BuilderCache *self,
                                        GPtrArray   **changed_out,
                                        GError      **error)
 {
-  g_autoptr(GPtrArray) changed = g_ptr_array_new_with_free_func (g_object_unref);
   g_autoptr(GPtrArray) changed_paths = g_ptr_array_new_with_free_func (g_free);
-  g_autoptr(GFile) last_root = NULL;
-  int i;
 
-  if (self->last_parent &&
-      !ostree_repo_read_commit (self->repo, self->last_parent, &last_root, NULL, NULL, error))
-    return FALSE;
-
-  if (!diff_dirs (self->devino_to_csum_cache,
-                  last_root,
-                  self->app_dir,
-                  changed,
-                  NULL, error))
-    return FALSE;
-
-  for (i = 0; i < changed->len; i++)
+  if (self->disable_writes)
     {
-      GFile *changed_file = g_ptr_array_index (changed, i);
-      char *path = g_file_get_relative_path (self->app_dir, changed_file);
-      g_ptr_array_add (changed_paths, path);
+      BuilderFileData *current_data = scan_file_data (self->app_dir, NULL, NULL, error);
+      if (current_data == NULL)
+        return FALSE;
+
+      diff_file_data ("", self->last_file_data, current_data, changed_paths);
+      builder_file_data_free (current_data);
+    }
+  else
+    {
+      g_autoptr(GPtrArray) changed = g_ptr_array_new_with_free_func (g_object_unref);
+      g_autoptr(GFile) last_root = NULL;
+      int i;
+
+      if (self->last_parent &&
+          !ostree_repo_read_commit (self->repo, self->last_parent, &last_root, NULL, NULL, error))
+        return FALSE;
+
+      if (!diff_dirs (self->devino_to_csum_cache,
+                      last_root,
+                      self->app_dir,
+                      changed,
+                      NULL, error))
+        return FALSE;
+
+      for (i = 0; i < changed->len; i++)
+        {
+          GFile *changed_file = g_ptr_array_index (changed, i);
+          char *path = g_file_get_relative_path (self->app_dir, changed_file);
+          g_ptr_array_add (changed_paths, path);
+        }
     }
 
   if (changed_out)
@@ -1114,6 +1330,12 @@ builder_cache_get_all_changes (BuilderCache *self,
   g_autofree char *init_ref = get_ref (self, "init");
   g_autofree char *finish_ref = get_ref (self, "finish");
 
+  if (self->disable_writes)
+    {
+      flatpak_fail (error, "Can't get all changes without cache");
+      return NULL;
+    }
+
   if (!ostree_repo_resolve_rev (self->repo, init_ref, FALSE, &init_commit, NULL))
     return FALSE;
 
@@ -1154,6 +1376,21 @@ builder_cache_get_changes (BuilderCache *self,
   g_autoptr(GVariant) commit_metadata = NULL;
   g_autofree char *parent_commit = NULL;
   g_autoptr(GVariant) changes_v = NULL;
+
+  if (self->disable_writes)
+    {
+      BuilderFileData *current_data = scan_file_data (self->app_dir, NULL, NULL, error);
+      g_autoptr(GPtrArray) changed_paths = g_ptr_array_new_with_free_func (g_free);
+
+      if (current_data == NULL)
+        return NULL;
+
+      diff_file_data ("", self->last_file_data, current_data, changed_paths);
+
+      builder_file_data_free (current_data);
+
+      return g_steal_pointer (&changed_paths);
+    }
 
   if (!ostree_repo_read_commit (self->repo, self->last_parent, &current_root, NULL, NULL, error))
     return NULL;
@@ -1196,8 +1433,15 @@ builder_cache_get_files (BuilderCache *self,
 {
   g_autoptr(GFile) current_root = NULL;
 
-  if (!ostree_repo_read_commit (self->repo, self->last_parent, &current_root, NULL, NULL, error))
-    return NULL;
+  if (self->repo == NULL)
+    {
+      current_root = g_object_ref (self->app_dir);
+    }
+  else
+    {
+      if (!ostree_repo_read_commit (self->repo, self->last_parent, &current_root, NULL, NULL, error))
+        return NULL;
+    }
 
   return get_changes (self, NULL, current_root, NULL, error);
 }
@@ -1206,6 +1450,13 @@ void
 builder_cache_disable_lookups (BuilderCache *self)
 {
   self->disabled = TRUE;
+}
+
+void
+builder_cache_disable_writes (BuilderCache *self)
+{
+  self->disabled = TRUE;
+  self->disable_writes = TRUE;
 }
 
 gboolean
@@ -1218,6 +1469,9 @@ builder_gc (BuilderCache *self,
   guint64 pruned_object_size_total;
   GHashTableIter iter;
   gpointer key, value;
+
+  if (self->repo == NULL)
+    return TRUE;
 
   if (prune_unused_stages)
     {
