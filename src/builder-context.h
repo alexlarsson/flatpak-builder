@@ -74,6 +74,9 @@ CURL *          builder_context_get_curl_session (BuilderContext *self);
 const char *    builder_context_get_arch (BuilderContext *self);
 void            builder_context_set_arch (BuilderContext *self,
                                           const char     *arch);
+const char *    builder_context_get_start_at (BuilderContext *self);
+void            builder_context_set_start_at (BuilderContext *self,
+                                              const char     *module);
 const char *    builder_context_get_stop_at (BuilderContext *self);
 void            builder_context_set_stop_at (BuilderContext *self,
                                              const char     *module);

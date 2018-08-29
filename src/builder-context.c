@@ -49,6 +49,7 @@ struct BuilderContext
   CURL           *curl_session;
   char           *arch;
   char           *stop_at;
+  char           *start_at;
 
   GFile          *download_dir;
   GPtrArray      *sources_dirs;
@@ -120,6 +121,7 @@ builder_context_finalize (GObject *object)
   g_free (self->arch);
   g_free (self->state_subdir);
   g_free (self->stop_at);
+  g_free (self->start_at);
   g_strfreev (self->cleanup);
   g_strfreev (self->cleanup_platform);
   glnx_release_lock_file(&self->rofiles_file_lock);
@@ -563,6 +565,20 @@ builder_context_set_arch (BuilderContext *self,
 {
   g_free (self->arch);
   self->arch = g_strdup (arch);
+}
+
+const char *
+builder_context_get_start_at (BuilderContext *self)
+{
+  return self->start_at;
+}
+
+void
+builder_context_set_start_at (BuilderContext *self,
+                             const char     *module)
+{
+  g_free (self->start_at);
+  self->start_at = g_strdup (module);
 }
 
 const char *
