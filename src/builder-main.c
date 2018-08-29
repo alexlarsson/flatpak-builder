@@ -63,6 +63,7 @@ static char *opt_state_dir;
 static char *opt_from_git;
 static char *opt_from_git_branch;
 static char *opt_stop_at;
+static char *opt_start_at;
 static char *opt_build_shell;
 static char *opt_arch;
 static char *opt_default_branch;
@@ -116,6 +117,7 @@ static GOptionEntry entries[] = {
   { "gpg-homedir", 0, 0, G_OPTION_ARG_STRING, &opt_gpg_homedir, "GPG Homedir to use when looking for keyrings", "HOMEDIR"},
   { "force-clean", 0, 0, G_OPTION_ARG_NONE, &opt_force_clean, "Erase previous contents of DIRECTORY", NULL },
   { "sandbox", 0, 0, G_OPTION_ARG_NONE, &opt_sandboxed, "Enforce sandboxing, disabling build-args", NULL },
+  { "start-at", 0, 0, G_OPTION_ARG_STRING, &opt_start_at, "Start building at this module (implies --build-only)", "MODULENAME"},
   { "stop-at", 0, 0, G_OPTION_ARG_STRING, &opt_stop_at, "Stop building at this module (implies --build-only)", "MODULENAME"},
   { "jobs", 0, 0, G_OPTION_ARG_INT, &opt_jobs, "Number of parallel jobs to build (default=NCPU)", "JOBS"},
   { "rebuild-on-sdk-change", 0, 0, G_OPTION_ARG_NONE, &opt_rebuild_on_sdk_change, "Rebuild if sdk changes", NULL },
@@ -555,6 +557,13 @@ main (int    argc,
   if (opt_arch)
     builder_context_set_arch (build_context, opt_arch);
 
+  if (opt_start_at)
+    {
+      opt_build_only = TRUE;
+      builder_context_set_start_at (build_context, opt_start_at);
+      builder_context_set_use_rofiles (build_context, FALSE);
+    }
+
   if (opt_stop_at)
     {
       opt_build_only = TRUE;
@@ -712,7 +721,7 @@ main (int    argc,
   g_assert (!opt_run);
   g_assert (!opt_show_deps);
 
-  if (opt_export_only || opt_finish_only || opt_build_shell)
+  if (opt_export_only || opt_finish_only || opt_build_shell || opt_start_at)
     {
       if (app_dir_is_empty)
         {
@@ -812,20 +821,24 @@ main (int    argc,
     }
 
   cache = builder_cache_new (build_context, app_dir, escaped_cache_branch);
+  if (opt_start_at) /* This disables cache completely */
+    builder_cache_disable_writes (cache);
+
+  if (opt_disable_cache) /* This disables *lookups*, but we still build the cache */
+    builder_cache_disable_lookups (cache);
+
   if (!builder_cache_open (cache, &error))
     {
       g_printerr ("Error opening cache: %s\n", error->message);
       return 1;
     }
 
-  if (opt_disable_cache) /* This disables *lookups*, but we still build the cache */
-    builder_cache_disable_lookups (cache);
-
   builder_manifest_checksum (manifest, cache, build_context);
 
   if (!opt_finish_only && !opt_export_only)
     {
-      if (!builder_cache_lookup (cache, "init"))
+      if (!builder_cache_lookup (cache, "init") &&
+          opt_start_at == NULL)
         {
           g_autofree char *body =
             g_strdup_printf ("Initialized %s\n",

@@ -1522,6 +1522,7 @@ builder_manifest_start (BuilderManifest *self,
   g_autofree char *arch_option = NULL;
   g_autoptr(GHashTable) names = g_hash_table_new (g_str_hash, g_str_equal);
   g_autofree char *sdk_path = NULL;
+  const char *start_at;
   const char *stop_at;
 
   if (self->sdk == NULL)
@@ -1563,6 +1564,10 @@ builder_manifest_start (BuilderManifest *self,
 
   if (!expand_modules (context, self->modules, &self->expanded_modules, names, error))
     return FALSE;
+
+  start_at = builder_context_get_start_at (context);
+  if (start_at != NULL && *start_at != 0 && g_hash_table_lookup (names, start_at) == NULL)
+    return flatpak_fail (error, "No module named %s (specified with --start-at)", start_at);
 
   stop_at = builder_context_get_stop_at (context);
   if (stop_at != NULL && g_hash_table_lookup (names, stop_at) == NULL)
@@ -1853,6 +1858,7 @@ builder_manifest_download (BuilderManifest *self,
                            BuilderContext  *context,
                            GError         **error)
 {
+  const char *start_at = builder_context_get_start_at (context);
   const char *stop_at = builder_context_get_stop_at (context);
   GList *l;
 
@@ -1869,6 +1875,14 @@ builder_manifest_download (BuilderManifest *self,
         {
           g_print ("Stopping at module %s\n", stop_at);
           return TRUE;
+        }
+
+      if (start_at != NULL)
+        {
+          if (*start_at != 0 && /* empty means first */
+              strcmp (name, start_at) != 0)
+            continue;
+          start_at = NULL;
         }
 
       if (!builder_module_download_sources (m, update_vcs, context, error))
@@ -1940,6 +1954,7 @@ builder_manifest_build (BuilderManifest *self,
                         BuilderContext  *context,
                         GError         **error)
 {
+  const char *start_at = builder_context_get_start_at (context);
   const char *stop_at = builder_context_get_stop_at (context);
   GList *l;
 
@@ -1968,6 +1983,14 @@ builder_manifest_build (BuilderManifest *self,
         }
 
       builder_module_checksum (m, cache, context);
+
+      if (start_at != NULL)
+        {
+          if (*start_at != 0 && /* empty means first */
+              strcmp (name, start_at) != 0)
+            continue;
+          start_at = NULL;
+        }
 
       if (!builder_cache_lookup (cache, stage))
         {
