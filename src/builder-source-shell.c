@@ -30,6 +30,7 @@
 #include "builder-flatpak-utils.h"
 #include "builder-utils.h"
 #include "builder-source-shell.h"
+#include "builder-checksum.h"
 
 struct BuilderSourceShell
 {
@@ -200,12 +201,12 @@ builder_source_shell_bundle (BuilderSource  *source,
 
 static void
 builder_source_shell_checksum (BuilderSource  *source,
-                               BuilderCache   *cache,
+                               GChecksum      *checksum,
                                BuilderContext *context)
 {
   BuilderSourceShell *self = BUILDER_SOURCE_SHELL (source);
 
-  builder_cache_checksum_strv (cache, self->commands);
+  builder_checksum_strv (checksum, self->commands);
 }
 
 static void

@@ -62,27 +62,6 @@ gboolean      builder_gc (BuilderCache *self,
                           gboolean      prune_unused_stages,
                           GError      **error);
 
-void builder_cache_checksum_str (BuilderCache *self,
-                                 const char   *str);
-void builder_cache_checksum_compat_str (BuilderCache *self,
-                                        const char   *str);
-void builder_cache_checksum_strv (BuilderCache *self,
-                                  char        **strv);
-void builder_cache_checksum_compat_strv (BuilderCache *self,
-                                         char        **strv);
-void builder_cache_checksum_boolean (BuilderCache *self,
-                                     gboolean      val);
-void builder_cache_checksum_compat_boolean (BuilderCache *self,
-                                            gboolean      val);
-void builder_cache_checksum_uint32 (BuilderCache *self,
-                                    guint32       val);
-void builder_cache_checksum_uint64 (BuilderCache *self,
-                                    guint64       val);
-void builder_cache_checksum_data (BuilderCache *self,
-                                  guint8       *data,
-                                  gsize         len);
-void builder_cache_checksum_random (BuilderCache *self);
-
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (BuilderCache, g_object_unref)
 
 G_END_DECLS

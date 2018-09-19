@@ -31,6 +31,7 @@
 
 #include "builder-utils.h"
 #include "builder-source-file.h"
+#include "builder-checksum.h"
 
 struct BuilderSourceFile
 {
@@ -544,7 +545,7 @@ builder_source_file_update (BuilderSource  *source,
 
 static void
 builder_source_file_checksum (BuilderSource  *source,
-                              BuilderCache   *cache,
+                              GChecksum      *checksum,
                               BuilderContext *context)
 {
   BuilderSourceFile *self = BUILDER_SOURCE_FILE (source);
@@ -560,16 +561,16 @@ builder_source_file_checksum (BuilderSource  *source,
 
   if (is_local &&
       g_file_load_contents (src, NULL, &data, &len, NULL, NULL))
-    builder_cache_checksum_data (cache, (guchar *) data, len);
+    builder_checksum_data (checksum, (guchar *) data, len);
 
-  builder_cache_checksum_str (cache, self->path);
-  builder_cache_checksum_str (cache, self->url);
-  builder_cache_checksum_str (cache, self->sha256);
-  builder_cache_checksum_compat_str (cache, self->md5);
-  builder_cache_checksum_compat_str (cache, self->sha1);
-  builder_cache_checksum_compat_str (cache, self->sha512);
-  builder_cache_checksum_str (cache, self->dest_filename);
-  builder_cache_checksum_compat_strv (cache, self->mirror_urls);
+  builder_checksum_str (checksum, self->path);
+  builder_checksum_str (checksum, self->url);
+  builder_checksum_str (checksum, self->sha256);
+  builder_checksum_compat_str (checksum, self->md5);
+  builder_checksum_compat_str (checksum, self->sha1);
+  builder_checksum_compat_str (checksum, self->sha512);
+  builder_checksum_str (checksum, self->dest_filename);
+  builder_checksum_compat_strv (checksum, self->mirror_urls);
 }
 
 static void

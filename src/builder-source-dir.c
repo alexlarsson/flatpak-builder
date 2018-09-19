@@ -31,6 +31,7 @@
 
 #include "builder-utils.h"
 #include "builder-source-dir.h"
+#include "builder-checksum.h"
 
 struct BuilderSourceDir
 {
@@ -259,11 +260,11 @@ builder_source_dir_update (BuilderSource  *source,
 
 static void
 builder_source_dir_checksum (BuilderSource  *source,
-                              BuilderCache   *cache,
-                              BuilderContext *context)
+                             GChecksum      *checksum,
+                             BuilderContext *context)
 {
   /* We can't realistically checksum a directory, so always rebuild */
-  builder_cache_checksum_random (cache);
+  builder_checksum_random (checksum);
 }
 
 static void

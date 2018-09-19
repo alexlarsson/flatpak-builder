@@ -33,6 +33,7 @@
 #include "builder-flatpak-utils.h"
 #include "builder-post-process.h"
 #include "builder-extension.h"
+#include "builder-checksum.h"
 
 #include <libxml/parser.h>
 
@@ -1697,89 +1698,89 @@ builder_manifest_init_app_dir (BuilderManifest *self,
 /* This gets the checksum of everything that globally affects the build */
 void
 builder_manifest_checksum (BuilderManifest *self,
-                           BuilderCache    *cache,
+                           GChecksum      *checksum,
                            BuilderContext  *context)
 {
   GList *l;
 
-  builder_cache_checksum_str (cache, BUILDER_MANIFEST_CHECKSUM_VERSION);
-  builder_cache_checksum_str (cache, self->id);
+  builder_checksum_str (checksum, BUILDER_MANIFEST_CHECKSUM_VERSION);
+  builder_checksum_str (checksum, self->id);
   /* No need to include version here, it doesn't affect the build */
-  builder_cache_checksum_str (cache, self->runtime);
-  builder_cache_checksum_str (cache, builder_manifest_get_runtime_version (self));
-  builder_cache_checksum_str (cache, self->sdk);
+  builder_checksum_str (checksum, self->runtime);
+  builder_checksum_str (checksum, builder_manifest_get_runtime_version (self));
+  builder_checksum_str (checksum, self->sdk);
   /* Always rebuild on sdk change if we're actually including the sdk in the cache */
   if (self->writable_sdk || self->build_runtime ||
       builder_context_get_rebuild_on_sdk_change (context))
-    builder_cache_checksum_str (cache, self->sdk_commit);
-  builder_cache_checksum_str (cache, self->var);
-  builder_cache_checksum_str (cache, self->metadata);
-  builder_cache_checksum_strv (cache, self->tags);
-  builder_cache_checksum_boolean (cache, self->writable_sdk);
-  builder_cache_checksum_strv (cache, self->sdk_extensions);
-  builder_cache_checksum_boolean (cache, self->build_runtime);
-  builder_cache_checksum_boolean (cache, self->build_extension);
-  builder_cache_checksum_boolean (cache, self->separate_locales);
-  builder_cache_checksum_str (cache, self->base);
-  builder_cache_checksum_str (cache, self->base_version);
-  builder_cache_checksum_str (cache, self->base_commit);
-  builder_cache_checksum_strv (cache, self->base_extensions);
-  builder_cache_checksum_compat_str (cache, self->extension_tag);
+    builder_checksum_str (checksum, self->sdk_commit);
+  builder_checksum_str (checksum, self->var);
+  builder_checksum_str (checksum, self->metadata);
+  builder_checksum_strv (checksum, self->tags);
+  builder_checksum_boolean (checksum, self->writable_sdk);
+  builder_checksum_strv (checksum, self->sdk_extensions);
+  builder_checksum_boolean (checksum, self->build_runtime);
+  builder_checksum_boolean (checksum, self->build_extension);
+  builder_checksum_boolean (checksum, self->separate_locales);
+  builder_checksum_str (checksum, self->base);
+  builder_checksum_str (checksum, self->base_version);
+  builder_checksum_str (checksum, self->base_commit);
+  builder_checksum_strv (checksum, self->base_extensions);
+  builder_checksum_compat_str (checksum, self->extension_tag);
 
   if (self->build_options)
-    builder_options_checksum (self->build_options, cache, context);
+    builder_options_checksum (self->build_options, checksum, context);
 
   for (l = self->add_build_extensions; l != NULL; l = l->next)
     {
       BuilderExtension *e = l->data;
-      builder_extension_checksum (e, cache, context);
+      builder_extension_checksum (e, checksum, context);
     }
 }
 
 static void
 builder_manifest_checksum_for_cleanup (BuilderManifest *self,
-                                       BuilderCache    *cache,
+                                       GChecksum      *checksum,
                                        BuilderContext  *context)
 {
   GList *l;
 
-  builder_cache_checksum_str (cache, BUILDER_MANIFEST_CHECKSUM_CLEANUP_VERSION);
-  builder_cache_checksum_strv (cache, self->cleanup);
-  builder_cache_checksum_strv (cache, self->cleanup_commands);
-  builder_cache_checksum_str (cache, self->rename_desktop_file);
-  builder_cache_checksum_str (cache, self->rename_appdata_file);
-  builder_cache_checksum_str (cache, self->appdata_license);
-  builder_cache_checksum_str (cache, self->rename_icon);
-  builder_cache_checksum_boolean (cache, self->copy_icon);
-  builder_cache_checksum_str (cache, self->desktop_file_name_prefix);
-  builder_cache_checksum_str (cache, self->desktop_file_name_suffix);
-  builder_cache_checksum_boolean (cache, self->appstream_compose);
+  builder_checksum_str (checksum, BUILDER_MANIFEST_CHECKSUM_CLEANUP_VERSION);
+  builder_checksum_strv (checksum, self->cleanup);
+  builder_checksum_strv (checksum, self->cleanup_commands);
+  builder_checksum_str (checksum, self->rename_desktop_file);
+  builder_checksum_str (checksum, self->rename_appdata_file);
+  builder_checksum_str (checksum, self->appdata_license);
+  builder_checksum_str (checksum, self->rename_icon);
+  builder_checksum_boolean (checksum, self->copy_icon);
+  builder_checksum_str (checksum, self->desktop_file_name_prefix);
+  builder_checksum_str (checksum, self->desktop_file_name_suffix);
+  builder_checksum_boolean (checksum, self->appstream_compose);
 
   for (l = self->expanded_modules; l != NULL; l = l->next)
     {
       BuilderModule *m = l->data;
-      builder_module_checksum_for_cleanup (m, cache, context);
+      builder_module_checksum_for_cleanup (m, checksum, context);
     }
 }
 
 static void
 builder_manifest_checksum_for_finish (BuilderManifest *self,
-                                      BuilderCache    *cache,
+                                      GChecksum      *checksum,
                                       BuilderContext  *context)
 {
   GList *l;
   g_autofree char *json = NULL;
 
-  builder_cache_checksum_str (cache, BUILDER_MANIFEST_CHECKSUM_FINISH_VERSION);
-  builder_cache_checksum_strv (cache, self->finish_args);
-  builder_cache_checksum_str (cache, self->command);
-  builder_cache_checksum_strv (cache, self->inherit_extensions);
-  builder_cache_checksum_compat_strv (cache, self->inherit_sdk_extensions);
+  builder_checksum_str (checksum, BUILDER_MANIFEST_CHECKSUM_FINISH_VERSION);
+  builder_checksum_strv (checksum, self->finish_args);
+  builder_checksum_str (checksum, self->command);
+  builder_checksum_strv (checksum, self->inherit_extensions);
+  builder_checksum_compat_strv (checksum, self->inherit_sdk_extensions);
 
   for (l = self->add_extensions; l != NULL; l = l->next)
     {
       BuilderExtension *e = l->data;
-      builder_extension_checksum (e, cache, context);
+      builder_extension_checksum (e, checksum, context);
     }
 
   if (self->metadata)
@@ -1791,39 +1792,39 @@ builder_manifest_checksum_for_finish (BuilderManifest *self,
       gsize len;
 
       if (g_file_load_contents (metadata, NULL, &data, &len, NULL, &my_error))
-        builder_cache_checksum_data (cache, (guchar *) data, len);
+        builder_checksum_data (checksum, (guchar *) data, len);
       else
         g_warning ("Can't load metadata file %s: %s", self->metadata, my_error->message);
     }
 
   json = builder_manifest_serialize (self);
-  builder_cache_checksum_str (cache, json);
+  builder_checksum_str (checksum, json);
 }
 
 static void
 builder_manifest_checksum_for_bundle_sources (BuilderManifest *self,
-                                              BuilderCache    *cache,
+                                              GChecksum      *checksum,
                                               BuilderContext  *context)
 {
-  builder_cache_checksum_str (cache, BUILDER_MANIFEST_CHECKSUM_BUNDLE_SOURCES_VERSION);
-  builder_cache_checksum_boolean (cache, builder_context_get_bundle_sources (context));
+  builder_checksum_str (checksum, BUILDER_MANIFEST_CHECKSUM_BUNDLE_SOURCES_VERSION);
+  builder_checksum_boolean (checksum, builder_context_get_bundle_sources (context));
 }
 
 static void
 builder_manifest_checksum_for_platform (BuilderManifest *self,
-                                        BuilderCache    *cache,
+                                        GChecksum      *checksum,
                                         BuilderContext  *context)
 {
   GList *l;
 
-  builder_cache_checksum_str (cache, BUILDER_MANIFEST_CHECKSUM_PLATFORM_VERSION);
-  builder_cache_checksum_str (cache, self->id_platform);
-  builder_cache_checksum_str (cache, self->runtime_commit);
-  builder_cache_checksum_str (cache, self->metadata_platform);
-  builder_cache_checksum_strv (cache, self->cleanup_platform);
-  builder_cache_checksum_strv (cache, self->cleanup_platform_commands);
-  builder_cache_checksum_strv (cache, self->prepare_platform_commands);
-  builder_cache_checksum_strv (cache, self->platform_extensions);
+  builder_checksum_str (checksum, BUILDER_MANIFEST_CHECKSUM_PLATFORM_VERSION);
+  builder_checksum_str (checksum, self->id_platform);
+  builder_checksum_str (checksum, self->runtime_commit);
+  builder_checksum_str (checksum, self->metadata_platform);
+  builder_checksum_strv (checksum, self->cleanup_platform);
+  builder_checksum_strv (checksum, self->cleanup_platform_commands);
+  builder_checksum_strv (checksum, self->prepare_platform_commands);
+  builder_checksum_strv (checksum, self->platform_extensions);
 
   if (self->metadata_platform)
     {
@@ -1834,7 +1835,7 @@ builder_manifest_checksum_for_platform (BuilderManifest *self,
       gsize len;
 
       if (g_file_load_contents (metadata, NULL, &data, &len, NULL, &my_error))
-        builder_cache_checksum_data (cache, (guchar *) data, len);
+        builder_checksum_data (checksum, (guchar *) data, len);
       else
         g_warning ("Can't load metadata-platform file %s: %s", self->metadata_platform, my_error->message);
     }
@@ -1842,7 +1843,7 @@ builder_manifest_checksum_for_platform (BuilderManifest *self,
   for (l = self->expanded_modules; l != NULL; l = l->next)
     {
       BuilderModule *m = l->data;
-      builder_module_checksum_for_platform (m, cache, context);
+      builder_module_checksum_for_platform (m, checksum, context);
     }
 }
 
@@ -1967,7 +1968,7 @@ builder_manifest_build (BuilderManifest *self,
           continue;
         }
 
-      builder_module_checksum (m, cache, context);
+      builder_module_checksum (m, builder_cache_get_checksum (cache) , context);
 
       if (!builder_cache_lookup (cache, stage))
         {
@@ -2347,7 +2348,7 @@ builder_manifest_cleanup (BuilderManifest *self,
   g_autoptr(GFile) appdata_source = NULL;
   int i;
 
-  builder_manifest_checksum_for_cleanup (self, cache, context);
+  builder_manifest_checksum_for_cleanup (self, builder_cache_get_checksum (cache), context);
   if (!builder_cache_lookup (cache, "cleanup"))
     {
       g_autoptr(GHashTable) to_remove_ht = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
@@ -2695,7 +2696,7 @@ builder_manifest_finish (BuilderManifest *self,
   int i;
   GList *l;
 
-  builder_manifest_checksum_for_finish (self, cache, context);
+  builder_manifest_checksum_for_finish (self, builder_cache_get_checksum (cache), context);
   if (!builder_cache_lookup (cache, "finish"))
     {
       GFile *app_dir = NULL;
@@ -3107,7 +3108,7 @@ builder_manifest_create_platform (BuilderManifest *self,
       self->id_platform == NULL)
     return TRUE;
 
-  builder_manifest_checksum_for_platform (self, cache, context);
+  builder_manifest_checksum_for_platform (self, builder_cache_get_checksum (cache), context);
   if (!builder_cache_lookup (cache, "platform"))
     {
       g_autoptr(GHashTable) to_remove_ht = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
@@ -3471,7 +3472,7 @@ builder_manifest_bundle_sources (BuilderManifest *self,
                                  GError         **error)
 {
 
-  builder_manifest_checksum_for_bundle_sources (self, cache, context);
+  builder_manifest_checksum_for_bundle_sources (self, builder_cache_get_checksum (cache), context);
   if (!builder_cache_lookup (cache, "bundle-sources"))
     {
       g_autofree char *sources_id = builder_manifest_get_sources_id (self);

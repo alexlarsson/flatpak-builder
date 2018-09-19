@@ -821,7 +821,7 @@ main (int    argc,
   if (opt_disable_cache) /* This disables *lookups*, but we still build the cache */
     builder_cache_disable_lookups (cache);
 
-  builder_manifest_checksum (manifest, cache, build_context);
+  builder_manifest_checksum (manifest, builder_cache_get_checksum (cache), build_context);
 
   if (!opt_finish_only && !opt_export_only)
     {

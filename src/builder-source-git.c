@@ -33,6 +33,7 @@
 #include "builder-git.h"
 #include "builder-utils.h"
 #include "builder-flatpak-utils.h"
+#include "builder-checksum.h"
 
 struct BuilderSourceGit
 {
@@ -321,7 +322,7 @@ builder_source_git_bundle (BuilderSource  *source,
 
 static void
 builder_source_git_checksum (BuilderSource  *source,
-                             BuilderCache   *cache,
+                             GChecksum      *checksum,
                              BuilderContext *context)
 {
   BuilderSourceGit *self = BUILDER_SOURCE_GIT (source);
@@ -329,11 +330,11 @@ builder_source_git_checksum (BuilderSource  *source,
   g_autoptr(GError) error = NULL;
   g_autofree char *location = NULL;
 
-  builder_cache_checksum_str (cache, self->url);
-  builder_cache_checksum_str (cache, self->path);
-  builder_cache_checksum_str (cache, self->branch);
-  builder_cache_checksum_str (cache, self->commit);
-  builder_cache_checksum_boolean (cache, self->disable_fsckobjects);
+  builder_checksum_str (checksum, self->url);
+  builder_checksum_str (checksum, self->path);
+  builder_checksum_str (checksum, self->branch);
+  builder_checksum_str (checksum, self->commit);
+  builder_checksum_boolean (checksum, self->disable_fsckobjects);
   /* We don't checksum disable_shallow_clone, because it doesn't have
      any effect on the resultant build */
 
@@ -342,7 +343,7 @@ builder_source_git_checksum (BuilderSource  *source,
     {
       current_commit = builder_git_get_current_commit (location,get_branch (self), FALSE, context, &error);
       if (current_commit)
-        builder_cache_checksum_str (cache, current_commit);
+        builder_checksum_str (checksum, current_commit);
       else if (error)
         g_warning ("Failed to get current git checksum: %s", error->message);
     }

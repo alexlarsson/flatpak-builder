@@ -111,7 +111,7 @@ gboolean        builder_manifest_show_deps (BuilderManifest *self,
                                             BuilderContext  *context,
                                             GError         **error);
 void            builder_manifest_checksum (BuilderManifest *self,
-                                           BuilderCache    *cache,
+                                           GChecksum      *checksum,
                                            BuilderContext  *context);
 gboolean        builder_manifest_cleanup (BuilderManifest *self,
                                           BuilderCache    *cache,

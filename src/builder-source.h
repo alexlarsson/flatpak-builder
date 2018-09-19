@@ -69,7 +69,7 @@ typedef struct
                       BuilderContext *context,
                       GError        **error);
   void (* checksum)(BuilderSource  *self,
-                    BuilderCache   *cache,
+                    GChecksum      *checksum,
                     BuilderContext *context);
   void (* finish)(BuilderSource  *self,
                   GPtrArray      *args,
@@ -104,7 +104,7 @@ gboolean builder_source_update (BuilderSource  *self,
                                 GError        **error);
 
 void     builder_source_checksum (BuilderSource  *self,
-                                  BuilderCache   *cache,
+                                  GChecksum      *checksum,
                                   BuilderContext *context);
 void     builder_source_finish (BuilderSource  *self,
                                 GPtrArray      *args,

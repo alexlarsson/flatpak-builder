@@ -40,6 +40,8 @@ flatpak_builder_SOURCES = \
 	src/builder-context.h \
 	src/builder-cache.c \
 	src/builder-cache.h \
+	src/builder-checksum.c \
+	src/builder-checksum.h \
 	src/builder-utils.c \
 	src/builder-utils.h \
 	src/builder-flatpak-utils.c \

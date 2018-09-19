@@ -31,6 +31,7 @@
 #include "builder-options.h"
 #include "builder-context.h"
 #include "builder-utils.h"
+#include "builder-checksum.h"
 
 struct BuilderOptions
 {
@@ -1281,40 +1282,40 @@ builder_options_get_make_install_args (BuilderOptions *self,
 
 void
 builder_options_checksum (BuilderOptions *self,
-                          BuilderCache   *cache,
+                          GChecksum      *checksum,
                           BuilderContext *context)
 {
   BuilderOptions *arch_options;
 
-  builder_cache_checksum_str (cache, BUILDER_OPTION_CHECKSUM_VERSION);
-  builder_cache_checksum_str (cache, self->cflags);
-  builder_cache_checksum_compat_boolean (cache, self->cflags_override);
-  builder_cache_checksum_str (cache, self->cxxflags);
-  builder_cache_checksum_compat_boolean (cache, self->cxxflags_override);
-  builder_cache_checksum_str (cache, self->cppflags);
-  builder_cache_checksum_compat_boolean (cache, self->cppflags_override);
-  builder_cache_checksum_str (cache, self->ldflags);
-  builder_cache_checksum_compat_boolean (cache, self->ldflags_override);
-  builder_cache_checksum_str (cache, self->prefix);
-  builder_cache_checksum_compat_str (cache, self->libdir);
-  builder_cache_checksum_strv (cache, self->env);
-  builder_cache_checksum_strv (cache, self->build_args);
-  builder_cache_checksum_compat_strv (cache, self->test_args);
-  builder_cache_checksum_strv (cache, self->config_opts);
-  builder_cache_checksum_strv (cache, self->make_args);
-  builder_cache_checksum_strv (cache, self->make_install_args);
-  builder_cache_checksum_boolean (cache, self->strip);
-  builder_cache_checksum_boolean (cache, self->no_debuginfo);
-  builder_cache_checksum_boolean (cache, self->no_debuginfo_compression);
+  builder_checksum_str (checksum, BUILDER_OPTION_CHECKSUM_VERSION);
+  builder_checksum_str (checksum, self->cflags);
+  builder_checksum_compat_boolean (checksum, self->cflags_override);
+  builder_checksum_str (checksum, self->cxxflags);
+  builder_checksum_compat_boolean (checksum, self->cxxflags_override);
+  builder_checksum_str (checksum, self->cppflags);
+  builder_checksum_compat_boolean (checksum, self->cppflags_override);
+  builder_checksum_str (checksum, self->ldflags);
+  builder_checksum_compat_boolean (checksum, self->ldflags_override);
+  builder_checksum_str (checksum, self->prefix);
+  builder_checksum_compat_str (checksum, self->libdir);
+  builder_checksum_strv (checksum, self->env);
+  builder_checksum_strv (checksum, self->build_args);
+  builder_checksum_compat_strv (checksum, self->test_args);
+  builder_checksum_strv (checksum, self->config_opts);
+  builder_checksum_strv (checksum, self->make_args);
+  builder_checksum_strv (checksum, self->make_install_args);
+  builder_checksum_boolean (checksum, self->strip);
+  builder_checksum_boolean (checksum, self->no_debuginfo);
+  builder_checksum_boolean (checksum, self->no_debuginfo_compression);
 
-  builder_cache_checksum_compat_str (cache, self->append_path);
-  builder_cache_checksum_compat_str (cache, self->prepend_path);
-  builder_cache_checksum_compat_str (cache, self->append_ld_library_path);
-  builder_cache_checksum_compat_str (cache, self->prepend_ld_library_path);
-  builder_cache_checksum_compat_str (cache, self->append_pkg_config_path);
-  builder_cache_checksum_compat_str (cache, self->prepend_pkg_config_path);
+  builder_checksum_compat_str (checksum, self->append_path);
+  builder_checksum_compat_str (checksum, self->prepend_path);
+  builder_checksum_compat_str (checksum, self->append_ld_library_path);
+  builder_checksum_compat_str (checksum, self->prepend_ld_library_path);
+  builder_checksum_compat_str (checksum, self->append_pkg_config_path);
+  builder_checksum_compat_str (checksum, self->prepend_pkg_config_path);
 
   arch_options = g_hash_table_lookup (self->arch, builder_context_get_arch (context));
   if (arch_options)
-    builder_options_checksum (arch_options, cache, context);
+    builder_options_checksum (arch_options, checksum, context);
 }

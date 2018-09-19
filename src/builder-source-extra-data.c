@@ -30,6 +30,7 @@
 #include "builder-flatpak-utils.h"
 #include "builder-utils.h"
 #include "builder-source-extra-data.h"
+#include "builder-checksum.h"
 
 struct BuilderSourceExtraData
 {
@@ -188,16 +189,16 @@ builder_source_extra_data_bundle (BuilderSource  *source,
 
 static void
 builder_source_extra_data_checksum (BuilderSource  *source,
-                                    BuilderCache   *cache,
+                                    GChecksum      *checksum,
                                     BuilderContext *context)
 {
   BuilderSourceExtraData *self = BUILDER_SOURCE_EXTRA_DATA (source);
 
-  builder_cache_checksum_str (cache, self->filename);
-  builder_cache_checksum_str (cache, self->url);
-  builder_cache_checksum_str (cache, self->sha256);
-  builder_cache_checksum_uint64 (cache, self->size);
-  builder_cache_checksum_uint64 (cache, self->installed_size);
+  builder_checksum_str (checksum, self->filename);
+  builder_checksum_str (checksum, self->url);
+  builder_checksum_str (checksum, self->sha256);
+  builder_checksum_uint64 (checksum, self->size);
+  builder_checksum_uint64 (checksum, self->installed_size);
 }
 
 static void

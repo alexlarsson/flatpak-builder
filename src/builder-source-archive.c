@@ -31,6 +31,7 @@
 
 #include "builder-utils.h"
 #include "builder-source-archive.h"
+#include "builder-checksum.h"
 
 struct BuilderSourceArchive
 {
@@ -762,19 +763,19 @@ builder_source_archive_bundle (BuilderSource  *source,
 
 static void
 builder_source_archive_checksum (BuilderSource  *source,
-                                 BuilderCache   *cache,
+                                 GChecksum      *checksum,
                                  BuilderContext *context)
 {
   BuilderSourceArchive *self = BUILDER_SOURCE_ARCHIVE (source);
 
-  builder_cache_checksum_str (cache, self->url);
-  builder_cache_checksum_str (cache, self->sha256);
-  builder_cache_checksum_compat_str (cache, self->md5);
-  builder_cache_checksum_compat_str (cache, self->sha1);
-  builder_cache_checksum_compat_str (cache, self->sha512);
-  builder_cache_checksum_uint32 (cache, self->strip_components);
-  builder_cache_checksum_compat_str (cache, self->dest_filename);
-  builder_cache_checksum_compat_strv (cache, self->mirror_urls);
+  builder_checksum_str (checksum, self->url);
+  builder_checksum_str (checksum, self->sha256);
+  builder_checksum_compat_str (checksum, self->md5);
+  builder_checksum_compat_str (checksum, self->sha1);
+  builder_checksum_compat_str (checksum, self->sha512);
+  builder_checksum_uint32 (checksum, self->strip_components);
+  builder_checksum_compat_str (checksum, self->dest_filename);
+  builder_checksum_compat_strv (checksum, self->mirror_urls);
 }
 
 

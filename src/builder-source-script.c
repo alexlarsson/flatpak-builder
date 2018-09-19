@@ -30,6 +30,7 @@
 #include "builder-flatpak-utils.h"
 #include "builder-utils.h"
 #include "builder-source-script.h"
+#include "builder-checksum.h"
 
 struct BuilderSourceScript
 {
@@ -186,13 +187,13 @@ builder_source_script_bundle (BuilderSource  *source,
 
 static void
 builder_source_script_checksum (BuilderSource  *source,
-                                BuilderCache   *cache,
+                                GChecksum      *checksum,
                                 BuilderContext *context)
 {
   BuilderSourceScript *self = BUILDER_SOURCE_SCRIPT (source);
 
-  builder_cache_checksum_strv (cache, self->commands);
-  builder_cache_checksum_str (cache, self->dest_filename);
+  builder_checksum_strv (checksum, self->commands);
+  builder_checksum_str (checksum, self->dest_filename);
 }
 
 static void

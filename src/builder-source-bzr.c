@@ -32,6 +32,7 @@
 #include "builder-source-bzr.h"
 #include "builder-utils.h"
 #include "builder-flatpak-utils.h"
+#include "builder-checksum.h"
 
 struct BuilderSourceBzr
 {
@@ -325,7 +326,7 @@ builder_source_bzr_bundle (BuilderSource  *source,
 
 static void
 builder_source_bzr_checksum (BuilderSource  *source,
-                             BuilderCache   *cache,
+                             GChecksum      *checksum,
                              BuilderContext *context)
 {
   BuilderSourceBzr *self = BUILDER_SOURCE_BZR (source);
@@ -333,12 +334,12 @@ builder_source_bzr_checksum (BuilderSource  *source,
 
   g_autoptr(GError) error = NULL;
 
-  builder_cache_checksum_str (cache, self->url);
-  builder_cache_checksum_str (cache, self->revision);
+  builder_checksum_str (checksum, self->url);
+  builder_checksum_str (checksum, self->revision);
 
   current_commit = get_current_commit (self, context, &error);
   if (current_commit)
-    builder_cache_checksum_str (cache, current_commit);
+    builder_checksum_str (checksum, current_commit);
   else if (error)
     g_warning ("Failed to get current bzr checksum: %s", error->message);
 }

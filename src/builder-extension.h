@@ -52,7 +52,7 @@ void     builder_extension_add_remove_args (BuilderExtension  *self,
 void     builder_extension_add_finish_args (BuilderExtension  *self,
                                            GPtrArray *args);
 void     builder_extension_checksum (BuilderExtension  *self,
-                                     BuilderCache   *cache,
+                                     GChecksum      *checksum,
                                      BuilderContext *context);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (BuilderExtension, g_object_unref)

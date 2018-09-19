@@ -35,6 +35,7 @@
 #include "builder-utils.h"
 #include "builder-cache.h"
 #include "builder-context.h"
+#include "builder-checksum.h"
 
 struct BuilderCache
 {
@@ -396,7 +397,7 @@ builder_cache_lookup (BuilderCache *self,
 
   /* Reset the checksum, but feed it previous checksum so we chain it */
   g_checksum_reset (self->checksum);
-  builder_cache_checksum_str (self, self->current_checksum);
+  builder_checksum_str (self->checksum, self->current_checksum);
 
   if (self->disabled)
     return FALSE;
@@ -1254,130 +1255,4 @@ builder_gc (BuilderCache *self,
                             &objects_pruned,
                             &pruned_object_size_total,
                             NULL, error);
-}
-
-/* Only add to cache if non-empty. This means we can add
-   these things compatibly without invalidating the cache.
-   This is useful if empty means no change from what was
-   before */
-void
-builder_cache_checksum_compat_str (BuilderCache *self,
-                                   const char   *str)
-{
-  if (str)
-    builder_cache_checksum_str (self, str);
-}
-
-void
-builder_cache_checksum_str (BuilderCache *self,
-                            const char   *str)
-{
-  /* We include the terminating zero so that we make
-   * a difference between NULL and "". */
-
-  if (str)
-    g_checksum_update (self->checksum, (const guchar *) str, strlen (str) + 1);
-  else
-    /* Always add something so we can't be fooled by a sequence like
-       NULL, "a" turning into "a", NULL. */
-    g_checksum_update (self->checksum, (const guchar *) "\1", 1);
-}
-
-/* Only add to cache if non-empty. This means we can add
-   these things compatibly without invalidating the cache.
-   This is useful if empty means no change from what was
-   before */
-void
-builder_cache_checksum_compat_strv (BuilderCache *self,
-                                    char        **strv)
-{
-  if (strv != NULL && strv[0] != NULL)
-    builder_cache_checksum_strv (self, strv);
-}
-
-
-void
-builder_cache_checksum_strv (BuilderCache *self,
-                             char        **strv)
-{
-  int i;
-
-  if (strv)
-    {
-      g_checksum_update (self->checksum, (const guchar *) "\1", 1);
-      for (i = 0; strv[i] != NULL; i++)
-        builder_cache_checksum_str (self, strv[i]);
-    }
-  else
-    {
-      g_checksum_update (self->checksum, (const guchar *) "\2", 1);
-    }
-}
-
-void
-builder_cache_checksum_boolean (BuilderCache *self,
-                                gboolean      val)
-{
-  if (val)
-    g_checksum_update (self->checksum, (const guchar *) "\1", 1);
-  else
-    g_checksum_update (self->checksum, (const guchar *) "\0", 1);
-}
-
-/* Only add to cache if true. This means we can add
-   these things compatibly without invalidating the cache.
-   This is useful if false means no change from what was
-   before */
-void
-builder_cache_checksum_compat_boolean (BuilderCache *self,
-                                       gboolean      val)
-{
-  if (val)
-    builder_cache_checksum_boolean (self, val);
-}
-
-void
-builder_cache_checksum_uint32 (BuilderCache *self,
-                               guint32       val)
-{
-  guchar v[4];
-
-  v[0] = (val >> 0) & 0xff;
-  v[1] = (val >> 8) & 0xff;
-  v[2] = (val >> 16) & 0xff;
-  v[3] = (val >> 24) & 0xff;
-  g_checksum_update (self->checksum, v, 4);
-}
-
-void
-builder_cache_checksum_random (BuilderCache *self)
-{
-  builder_cache_checksum_uint32 (self, g_random_int ());
-  builder_cache_checksum_uint32 (self, g_random_int ());
-}
-
-void
-builder_cache_checksum_uint64 (BuilderCache *self,
-                               guint64       val)
-{
-  guchar v[8];
-
-  v[0] = (val >> 0) & 0xff;
-  v[1] = (val >> 8) & 0xff;
-  v[2] = (val >> 16) & 0xff;
-  v[3] = (val >> 24) & 0xff;
-  v[4] = (val >> 32) & 0xff;
-  v[5] = (val >> 40) & 0xff;
-  v[6] = (val >> 48) & 0xff;
-  v[7] = (val >> 56) & 0xff;
-
-  g_checksum_update (self->checksum, v, 8);
-}
-
-void
-builder_cache_checksum_data (BuilderCache *self,
-                             guint8       *data,
-                             gsize         len)
-{
-  g_checksum_update (self->checksum, data, len);
 }

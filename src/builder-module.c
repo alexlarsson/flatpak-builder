@@ -36,6 +36,7 @@
 #include "builder-module.h"
 #include "builder-post-process.h"
 #include "builder-manifest.h"
+#include "builder-checksum.h"
 
 struct BuilderModule
 {
@@ -1957,36 +1958,36 @@ builder_module_update (BuilderModule  *self,
 
 void
 builder_module_checksum (BuilderModule  *self,
-                         BuilderCache   *cache,
+                         GChecksum      *checksum,
                          BuilderContext *context)
 {
   GList *l;
 
-  builder_cache_checksum_str (cache, BUILDER_MODULE_CHECKSUM_VERSION);
-  builder_cache_checksum_str (cache, self->name);
-  builder_cache_checksum_str (cache, self->subdir);
-  builder_cache_checksum_strv (cache, self->post_install);
-  builder_cache_checksum_strv (cache, self->config_opts);
-  builder_cache_checksum_strv (cache, self->make_args);
-  builder_cache_checksum_strv (cache, self->make_install_args);
-  builder_cache_checksum_strv (cache, self->ensure_writable);
-  builder_cache_checksum_strv (cache, self->only_arches);
-  builder_cache_checksum_strv (cache, self->skip_arches);
-  builder_cache_checksum_boolean (cache, self->rm_configure);
-  builder_cache_checksum_boolean (cache, self->no_autogen);
-  builder_cache_checksum_boolean (cache, self->disabled);
-  builder_cache_checksum_boolean (cache, self->no_parallel_make);
-  builder_cache_checksum_boolean (cache, self->no_make_install);
-  builder_cache_checksum_boolean (cache, self->no_python_timestamp_fix);
-  builder_cache_checksum_boolean (cache, self->cmake);
-  builder_cache_checksum_boolean (cache, self->builddir);
-  builder_cache_checksum_strv (cache, self->build_commands);
-  builder_cache_checksum_str (cache, self->buildsystem);
-  builder_cache_checksum_str (cache, self->install_rule);
-  builder_cache_checksum_compat_boolean (cache, self->run_tests);
+  builder_checksum_str (checksum, BUILDER_MODULE_CHECKSUM_VERSION);
+  builder_checksum_str (checksum, self->name);
+  builder_checksum_str (checksum, self->subdir);
+  builder_checksum_strv (checksum, self->post_install);
+  builder_checksum_strv (checksum, self->config_opts);
+  builder_checksum_strv (checksum, self->make_args);
+  builder_checksum_strv (checksum, self->make_install_args);
+  builder_checksum_strv (checksum, self->ensure_writable);
+  builder_checksum_strv (checksum, self->only_arches);
+  builder_checksum_strv (checksum, self->skip_arches);
+  builder_checksum_boolean (checksum, self->rm_configure);
+  builder_checksum_boolean (checksum, self->no_autogen);
+  builder_checksum_boolean (checksum, self->disabled);
+  builder_checksum_boolean (checksum, self->no_parallel_make);
+  builder_checksum_boolean (checksum, self->no_make_install);
+  builder_checksum_boolean (checksum, self->no_python_timestamp_fix);
+  builder_checksum_boolean (checksum, self->cmake);
+  builder_checksum_boolean (checksum, self->builddir);
+  builder_checksum_strv (checksum, self->build_commands);
+  builder_checksum_str (checksum, self->buildsystem);
+  builder_checksum_str (checksum, self->install_rule);
+  builder_checksum_compat_boolean (checksum, self->run_tests);
 
   if (self->build_options)
-    builder_options_checksum (self->build_options, cache, context);
+    builder_options_checksum (self->build_options, checksum, context);
 
   for (l = self->sources; l != NULL; l = l->next)
     {
@@ -1995,26 +1996,26 @@ builder_module_checksum (BuilderModule  *self,
       if (!builder_source_is_enabled (source, context))
         continue;
 
-      builder_source_checksum (source, cache, context);
+      builder_source_checksum (source, checksum, context);
     }
 }
 
 void
 builder_module_checksum_for_cleanup (BuilderModule  *self,
-                                     BuilderCache   *cache,
+                                     GChecksum      *checksum,
                                      BuilderContext *context)
 {
-  builder_cache_checksum_str (cache, BUILDER_MODULE_CHECKSUM_VERSION);
-  builder_cache_checksum_str (cache, self->name);
-  builder_cache_checksum_strv (cache, self->cleanup);
+  builder_checksum_str (checksum, BUILDER_MODULE_CHECKSUM_VERSION);
+  builder_checksum_str (checksum, self->name);
+  builder_checksum_strv (checksum, self->cleanup);
 }
 
 void
 builder_module_checksum_for_platform (BuilderModule  *self,
-                                      BuilderCache   *cache,
+                                      GChecksum      *checksum,
                                       BuilderContext *context)
 {
-  builder_cache_checksum_strv (cache, self->cleanup_platform);
+  builder_checksum_strv (checksum, self->cleanup_platform);
 }
 
 void

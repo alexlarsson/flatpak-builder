@@ -32,6 +32,7 @@
 #include "builder-source-svn.h"
 #include "builder-utils.h"
 #include "builder-flatpak-utils.h"
+#include "builder-checksum.h"
 
 struct BuilderSourceSvn
 {
@@ -351,7 +352,7 @@ builder_source_svn_bundle (BuilderSource  *source,
 
 static void
 builder_source_svn_checksum (BuilderSource  *source,
-                             BuilderCache   *cache,
+                             GChecksum      *checksum,
                              BuilderContext *context)
 {
   BuilderSourceSvn *self = BUILDER_SOURCE_SVN (source);
@@ -359,12 +360,12 @@ builder_source_svn_checksum (BuilderSource  *source,
 
   g_autoptr(GError) error = NULL;
 
-  builder_cache_checksum_str (cache, self->url);
-  builder_cache_checksum_str (cache, self->revision);
+  builder_checksum_str (checksum, self->url);
+  builder_checksum_str (checksum, self->revision);
 
   current_revision = get_current_revision (self, context, &error);
   if (current_revision)
-    builder_cache_checksum_str (cache, current_revision);
+    builder_checksum_str (checksum, current_revision);
   else if (error)
     g_warning ("Failed to get current svn revision: %s", error->message);
 }

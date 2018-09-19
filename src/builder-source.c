@@ -28,6 +28,7 @@
 #include <sys/statfs.h>
 
 #include "builder-utils.h"
+#include "builder-checksum.h"
 #include "builder-source.h"
 #include "builder-source-archive.h"
 #include "builder-source-patch.h"
@@ -394,18 +395,18 @@ builder_source_update (BuilderSource  *self,
 
 void
 builder_source_checksum (BuilderSource  *self,
-                         BuilderCache   *cache,
+                         GChecksum      *checksum,
                          BuilderContext *context)
 {
   BuilderSourceClass *class;
 
   class = BUILDER_SOURCE_GET_CLASS (self);
 
-  builder_cache_checksum_str (cache, self->dest);
-  builder_cache_checksum_strv (cache, self->only_arches);
-  builder_cache_checksum_strv (cache, self->skip_arches);
+  builder_checksum_str (checksum, self->dest);
+  builder_checksum_strv (checksum, self->only_arches);
+  builder_checksum_strv (checksum, self->skip_arches);
 
-  class->checksum (self, cache, context);
+  class->checksum (self, checksum, context);
 }
 
 void

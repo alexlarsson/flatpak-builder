@@ -31,6 +31,7 @@
 
 #include "builder-utils.h"
 #include "builder-source-patch.h"
+#include "builder-checksum.h"
 
 struct BuilderSourcePatch
 {
@@ -366,7 +367,7 @@ builder_source_patch_bundle (BuilderSource  *source,
 
 static void
 builder_source_patch_checksum (BuilderSource  *source,
-                               BuilderCache   *cache,
+                               GChecksum      *checksum,
                                BuilderContext *context)
 {
   BuilderSourcePatch *self = BUILDER_SOURCE_PATCH (source);
@@ -382,13 +383,13 @@ builder_source_patch_checksum (BuilderSource  *source,
       gsize len;
 
       if (g_file_load_contents (src, NULL, &data, &len, NULL, NULL))
-        builder_cache_checksum_data (cache, (guchar *) data, len);
+        builder_checksum_data (checksum, (guchar *) data, len);
     }
 
-  builder_cache_checksum_str (cache, self->path);
-  builder_cache_checksum_compat_strv (cache, self->paths);
-  builder_cache_checksum_uint32 (cache, self->strip_components);
-  builder_cache_checksum_strv (cache, self->options);
+  builder_checksum_str (checksum, self->path);
+  builder_checksum_compat_strv (checksum, self->paths);
+  builder_checksum_uint32 (checksum, self->strip_components);
+  builder_checksum_strv (checksum, self->options);
 }
 
 static void

@@ -34,6 +34,7 @@
 #include "builder-flatpak-utils.h"
 #include "builder-utils.h"
 #include "builder-extension.h"
+#include "builder-checksum.h"
 
 struct BuilderExtension
 {
@@ -453,23 +454,23 @@ builder_extension_add_finish_args (BuilderExtension  *self,
 
 void
 builder_extension_checksum (BuilderExtension  *self,
-                            BuilderCache   *cache,
-                            BuilderContext *context)
+                            GChecksum         *checksum,
+                            BuilderContext    *context)
 {
-  builder_cache_checksum_str (cache, BUILDER_EXTENSION_CHECKSUM_VERSION);
-  builder_cache_checksum_str (cache, self->name);
-  builder_cache_checksum_str (cache, self->directory);
-  builder_cache_checksum_boolean (cache, self->bundle);
-  builder_cache_checksum_boolean (cache, self->autodelete);
-  builder_cache_checksum_boolean (cache, self->no_autodownload);
-  builder_cache_checksum_boolean (cache, self->locale_subset);
-  builder_cache_checksum_boolean (cache, self->subdirectories);
-  builder_cache_checksum_str (cache, self->add_ld_path);
-  builder_cache_checksum_str (cache, self->download_if);
-  builder_cache_checksum_str (cache, self->enable_if);
-  builder_cache_checksum_str (cache, self->merge_dirs);
-  builder_cache_checksum_str (cache, self->subdirectory_suffix);
-  builder_cache_checksum_str (cache, self->version);
-  builder_cache_checksum_str (cache, self->versions);
-  builder_cache_checksum_compat_boolean (cache, self->remove_after_build);
+  builder_checksum_str (checksum, BUILDER_EXTENSION_CHECKSUM_VERSION);
+  builder_checksum_str (checksum, self->name);
+  builder_checksum_str (checksum, self->directory);
+  builder_checksum_boolean (checksum, self->bundle);
+  builder_checksum_boolean (checksum, self->autodelete);
+  builder_checksum_boolean (checksum, self->no_autodownload);
+  builder_checksum_boolean (checksum, self->locale_subset);
+  builder_checksum_boolean (checksum, self->subdirectories);
+  builder_checksum_str (checksum, self->add_ld_path);
+  builder_checksum_str (checksum, self->download_if);
+  builder_checksum_str (checksum, self->enable_if);
+  builder_checksum_str (checksum, self->merge_dirs);
+  builder_checksum_str (checksum, self->subdirectory_suffix);
+  builder_checksum_str (checksum, self->version);
+  builder_checksum_str (checksum, self->versions);
+  builder_checksum_compat_boolean (checksum, self->remove_after_build);
 }

@@ -67,7 +67,7 @@ char **     builder_options_get_make_install_args (BuilderOptions *self,
                                                    BuilderContext *context,
                                                    char          **base_args);
 void        builder_options_checksum (BuilderOptions *self,
-                                      BuilderCache   *cache,
+                                      GChecksum      *checksum,
                                       BuilderContext *context);
 gboolean    builder_options_get_no_debuginfo (BuilderOptions *self,
                                               BuilderContext *context);
