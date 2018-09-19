@@ -283,6 +283,13 @@ builder_manifest_load (GFile *file,
   if (manifest == NULL)
     return NULL;
 
+  if (manifest->build_runtime && manifest->build_extension)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                   "Can't build both a runtime and an extension");
+      return FALSE;
+    }
+
   if (!init_modules (manifest, manifest->modules, names, error))
     return NULL;
 
@@ -1984,12 +1991,6 @@ setup_context (BuilderManifest *self,
   builder_context_set_options (context, self->build_options);
   builder_context_set_global_cleanup (context, (const char **) self->cleanup);
   builder_context_set_global_cleanup_platform (context, (const char **) self->cleanup_platform);
-  if (self->build_runtime && self->build_extension)
-    {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED,
-                   "Can't build both a runtime and an extension");
-      return FALSE;
-    }
   builder_context_set_build_runtime (context, self->build_runtime);
   builder_context_set_build_extension (context, self->build_extension);
   builder_context_set_separate_locales (context, self->separate_locales);
