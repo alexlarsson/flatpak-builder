@@ -2024,6 +2024,13 @@ builder_module_checksum_for_platform (BuilderModule  *self,
 }
 
 void
+builder_module_set_manifest (BuilderModule *self,
+                             BuilderManifest *manifest)
+{
+  self->manifest = manifest;
+}
+
+void
 builder_module_set_json_path (BuilderModule *self,
                               const char *json_path)
 {

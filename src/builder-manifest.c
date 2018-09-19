@@ -232,6 +232,8 @@ init_modules (BuilderManifest *manifest,
       BuilderModule *m = l->data;
       const char *name;
 
+      builder_module_set_manifest (m, manifest);
+
       if (!init_modules (manifest, builder_module_get_modules (m), names, error))
         return FALSE;
 
