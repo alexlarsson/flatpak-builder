@@ -25,10 +25,9 @@
 
 #include "builder-source.h"
 #include "builder-options.h"
+#include "builder-types.h"
 
 G_BEGIN_DECLS
-
-typedef struct BuilderModule BuilderModule;
 
 #define BUILDER_TYPE_MODULE (builder_module_get_type ())
 #define BUILDER_MODULE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), BUILDER_TYPE_MODULE, BuilderModule))

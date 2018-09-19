@@ -10,6 +10,7 @@ flatpak_builder_SOURCES = \
 	src/builder-options.h \
 	src/builder-extension.c \
 	src/builder-extension.h \
+	src/builder-types.h \
 	src/builder-module.c \
 	src/builder-module.h \
 	src/builder-post-process.c \

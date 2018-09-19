@@ -31,8 +31,6 @@
 
 G_BEGIN_DECLS
 
-typedef struct BuilderManifest BuilderManifest;
-
 #define BUILDER_TYPE_MANIFEST (builder_manifest_get_type ())
 #define BUILDER_MANIFEST(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), BUILDER_TYPE_MANIFEST, BuilderManifest))
 #define BUILDER_IS_MANIFEST(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), BUILDER_TYPE_MANIFEST))
