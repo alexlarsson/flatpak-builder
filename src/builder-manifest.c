@@ -41,16 +41,19 @@
 
 #define LOCALES_SEPARATE_DIR "share/runtime/locale"
 
+/* Shared with builder-module.c */
 static GFile *demarshal_base_dir = NULL;
+void _builder_manifest_set_demarshal_base_dir (GFile *dir);
+GFile *_builder_manifest_get_demarshal_base_dir (void);
 
 void
-builder_manifest_set_demarshal_base_dir (GFile *dir)
+_builder_manifest_set_demarshal_base_dir (GFile *dir)
 {
   g_set_object (&demarshal_base_dir, dir);
 }
 
 GFile *
-builder_manifest_get_demarshal_base_dir (void)
+_builder_manifest_get_demarshal_base_dir (void)
 {
   return g_object_ref (demarshal_base_dir);
 }
@@ -58,6 +61,8 @@ builder_manifest_get_demarshal_base_dir (void)
 struct BuilderManifest
 {
   GObject         parent;
+
+  char           *manifest_contents;
 
   char           *id;
   char           *id_platform;
@@ -174,6 +179,8 @@ builder_manifest_finalize (GObject *object)
 {
   BuilderManifest *self = (BuilderManifest *) object;
 
+  g_free (self->manifest_contents);
+
   g_free (self->id);
   g_free (self->branch);
   g_free (self->collection_id);
@@ -257,6 +264,39 @@ expand_modules (BuilderContext *context, GList *modules,
     }
 
   return TRUE;
+}
+
+BuilderManifest *
+builder_manifest_load (GFile *file,
+                       GError **error)
+{
+  g_autoptr(BuilderManifest) manifest = NULL;
+  g_autoptr(GFile) base_dir = g_file_get_parent (file);
+  g_autofree char *basename = g_file_get_basename (file);
+  g_autofree gchar *contents = NULL;
+
+  if (!g_file_get_contents (flatpak_file_get_path_cached (file), &contents, NULL, error))
+    return NULL;
+
+  /* Can't push this as user data to the demarshalling :/ */
+  _builder_manifest_set_demarshal_base_dir (base_dir);
+
+  manifest = (BuilderManifest *) builder_gobject_from_data (BUILDER_TYPE_MANIFEST, basename,
+                                                            contents, error);
+
+  _builder_manifest_set_demarshal_base_dir (NULL);
+
+  if (manifest == NULL)
+    return NULL;
+
+  manifest->manifest_contents = g_steal_pointer (&contents);
+  return g_steal_pointer (&manifest);
+}
+
+char *
+builder_manifest_get_content_checksum (BuilderManifest *self)
+{
+  return g_compute_checksum_for_string (G_CHECKSUM_SHA256, self->manifest_contents, -1);
 }
 
 static void
@@ -1147,7 +1187,7 @@ builder_manifest_deserialize_property (JsonSerializable *serializable,
         {
           JsonArray *array = json_node_get_array (property_node);
           guint i, array_len = json_array_get_length (array);
-          g_autoptr(GFile) saved_demarshal_base_dir = builder_manifest_get_demarshal_base_dir ();
+          g_autoptr(GFile) saved_demarshal_base_dir = _builder_manifest_get_demarshal_base_dir ();
           GList *modules = NULL;
           GObject *module;
 
@@ -1170,10 +1210,10 @@ builder_manifest_deserialize_property (JsonSerializable *serializable,
                   if (g_file_get_contents (module_path, &module_contents, NULL, &error))
                     {
                       g_autoptr(GFile) module_file_dir = g_file_get_parent (module_file);
-                      builder_manifest_set_demarshal_base_dir (module_file_dir);
+                      _builder_manifest_set_demarshal_base_dir (module_file_dir);
                       module = builder_gobject_from_data (BUILDER_TYPE_MODULE,
                                                           module_relpath, module_contents, &error);
-                      builder_manifest_set_demarshal_base_dir (saved_demarshal_base_dir);
+                      _builder_manifest_set_demarshal_base_dir (saved_demarshal_base_dir);
                       if (module)
                         {
                           builder_module_set_json_path (BUILDER_MODULE (module), module_path);
@@ -3466,7 +3506,6 @@ builder_manifest_create_platform (BuilderManifest *self,
 
 gboolean
 builder_manifest_bundle_sources (BuilderManifest *self,
-                                 const char      *json,
                                  BuilderCache    *cache,
                                  BuilderContext  *context,
                                  GError         **error)
@@ -3511,7 +3550,7 @@ builder_manifest_bundle_sources (BuilderManifest *self,
       manifest_filename = g_strconcat (self->id, ".json", NULL);
       manifest_file = g_file_get_child (json_dir, manifest_filename);
       if (!g_file_set_contents (flatpak_file_get_path_cached (manifest_file),
-                                json, strlen (json), error))
+                                self->manifest_contents, strlen (self->manifest_contents), error))
         return FALSE;
 
 

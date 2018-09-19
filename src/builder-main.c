@@ -373,7 +373,6 @@ main (int    argc,
   g_autoptr(BuilderManifest) manifest = NULL;
   g_autoptr(GOptionContext) context = NULL;
   const char *app_dir_path = NULL, *manifest_rel_path;
-  g_autofree gchar *manifest_contents = NULL;
   g_autofree gchar *manifest_sha256 = NULL;
   g_autofree gchar *old_manifest_sha256 = NULL;
   g_autoptr(BuilderContext) build_context = NULL;
@@ -613,13 +612,14 @@ main (int    argc,
 
   builder_context_set_base_dir (build_context, base_dir);
 
-  if (!g_file_get_contents (flatpak_file_get_path_cached (manifest_file), &manifest_contents, NULL, &error))
+  manifest = builder_manifest_load (manifest_file, &error);
+  if (manifest == NULL)
     {
-      g_printerr ("Can't load '%s': %s\n", manifest_rel_path, error->message);
+      g_printerr ("Error loading '%s': %s\n", manifest_rel_path, error->message);
       return 1;
     }
 
-  manifest_sha256 = g_compute_checksum_for_string (G_CHECKSUM_SHA256, manifest_contents, -1);
+  manifest_sha256 = builder_manifest_get_content_checksum (manifest);
 
   if (opt_skip_if_unchanged)
     {
@@ -629,20 +629,6 @@ main (int    argc,
           g_print ("No changes to manifest, skipping\n");
           return 42;
         }
-    }
-
-  /* Can't push this as user data to the demarshalling :/ */
-  builder_manifest_set_demarshal_base_dir (builder_context_get_base_dir (build_context));
-
-  manifest = (BuilderManifest *) builder_gobject_from_data (BUILDER_TYPE_MANIFEST, manifest_rel_path,
-                                                            manifest_contents, &error);
-
-  builder_manifest_set_demarshal_base_dir (NULL);
-
-  if (manifest == NULL)
-    {
-      g_printerr ("Can't parse '%s': %s\n", manifest_rel_path, error->message);
-      return 1;
     }
 
   if (opt_default_branch)
@@ -871,7 +857,7 @@ main (int    argc,
         }
 
       if (builder_context_get_bundle_sources (build_context) &&
-          !builder_manifest_bundle_sources (manifest, manifest_contents, cache, build_context, &error))
+          !builder_manifest_bundle_sources (manifest, cache, build_context, &error))
         {
           g_printerr ("Error: %s\n", error->message);
           return 1;

@@ -44,8 +44,9 @@ G_BEGIN_DECLS
 
 GType builder_manifest_get_type (void);
 
-void builder_manifest_set_demarshal_base_dir (GFile *dir);
-GFile *builder_manifest_get_demarshal_base_dir (void);
+BuilderManifest * builder_manifest_load (GFile *file,
+                                         GError **error);
+char *            builder_manifest_get_content_checksum (BuilderManifest *self);
 
 const char *    builder_manifest_get_id (BuilderManifest *self);
 char *          builder_manifest_get_locale_id (BuilderManifest *self);
@@ -120,7 +121,6 @@ gboolean        builder_manifest_finish (BuilderManifest *self,
                                          BuilderContext  *context,
                                          GError         **error);
 gboolean        builder_manifest_bundle_sources (BuilderManifest *self,
-                                                 const char      *json,
                                                  BuilderCache    *cache,
                                                  BuilderContext  *context,
                                                  GError         **error);

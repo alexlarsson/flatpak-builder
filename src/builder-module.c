@@ -38,10 +38,15 @@
 #include "builder-manifest.h"
 #include "builder-checksum.h"
 
+/* Shared with builder-manifest.c */
+void _builder_manifest_set_demarshal_base_dir (GFile *dir);
+GFile *_builder_manifest_get_demarshal_base_dir (void);
+
 struct BuilderModule
 {
   GObject         parent;
 
+  BuilderManifest *manifest; /* non-owning ref */
   char           *json_path;
   char           *name;
   char           *subdir;
@@ -733,7 +738,7 @@ static GList *
 load_sources_from_json (const char *sources_relpath)
 {
   g_autoptr(BuilderObjectList) sources = NULL;
-  g_autoptr(GFile) saved_demarshal_base_dir = builder_manifest_get_demarshal_base_dir ();
+  g_autoptr(GFile) saved_demarshal_base_dir = _builder_manifest_get_demarshal_base_dir ();
   g_autoptr(GFile) sources_file =
     g_file_resolve_relative_path (saved_demarshal_base_dir, sources_relpath);
   g_autoptr(GFile) sources_file_dir = g_file_get_parent (sources_file);
@@ -749,7 +754,7 @@ load_sources_from_json (const char *sources_relpath)
       return NULL;
     }
 
-  builder_manifest_set_demarshal_base_dir (sources_file_dir);
+  _builder_manifest_set_demarshal_base_dir (sources_file_dir);
   sources_root = json_from_string (sources_json, &error);
   if (sources_root == NULL)
     {
@@ -810,7 +815,7 @@ builder_module_deserialize_property (JsonSerializable *serializable,
         {
           JsonArray *array = json_node_get_array (property_node);
           guint i, array_len = json_array_get_length (array);
-          g_autoptr(GFile) saved_demarshal_base_dir = builder_manifest_get_demarshal_base_dir ();
+          g_autoptr(GFile) saved_demarshal_base_dir = _builder_manifest_get_demarshal_base_dir ();
           GList *modules = NULL;
           GObject *module;
 
@@ -832,10 +837,10 @@ builder_module_deserialize_property (JsonSerializable *serializable,
                   if (g_file_get_contents (module_path, &module_contents, NULL, NULL))
                     {
                       g_autoptr(GFile) module_file_dir = g_file_get_parent (module_file);
-                      builder_manifest_set_demarshal_base_dir (module_file_dir);
+                      _builder_manifest_set_demarshal_base_dir (module_file_dir);
                       module = builder_gobject_from_data (BUILDER_TYPE_MODULE,
                                                           module_relpath, module_contents, NULL);
-                      builder_manifest_set_demarshal_base_dir (saved_demarshal_base_dir);
+                      _builder_manifest_set_demarshal_base_dir (saved_demarshal_base_dir);
                       if (module)
                         {
                           builder_module_set_json_path (BUILDER_MODULE (module), module_path);
