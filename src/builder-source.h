@@ -60,6 +60,7 @@ typedef struct
   gboolean (* extract)(BuilderSource  *self,
                        GFile          *dest,
                        BuilderOptions *build_options,
+                       BuilderManifest *manifest,
                        BuilderContext *context,
                        GError        **error);
   gboolean (* bundle)(BuilderSource  *self,
@@ -94,6 +95,7 @@ gboolean builder_source_download (BuilderSource  *self,
 gboolean builder_source_extract (BuilderSource  *self,
                                  GFile          *dest,
                                  BuilderOptions *build_options,
+                                 BuilderManifest *manifest,
                                  BuilderContext *context,
                                  GError        **error);
 gboolean builder_source_bundle (BuilderSource  *self,

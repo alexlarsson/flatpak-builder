@@ -62,16 +62,10 @@ struct BuilderContext
   GFile          *rofiles_allocated_dir;
   GLnxLockFile   rofiles_file_lock;
 
-  BuilderOptions *options;
   gboolean        keep_build_dirs;
   gboolean        delete_build_dirs;
   int             jobs;
-  char          **cleanup;
-  char          **cleanup_platform;
   gboolean        use_ccache;
-  gboolean        build_runtime;
-  gboolean        build_extension;
-  gboolean        separate_locales;
   gboolean        bundle_sources;
   gboolean        sandboxed;
   gboolean        rebuild_on_sdk_change;
@@ -115,13 +109,10 @@ builder_context_finalize (GObject *object)
   g_clear_object (&self->run_dir);
   g_clear_object (&self->base_dir);
   g_clear_object (&self->soup_session);
-  g_clear_object (&self->options);
   g_clear_object (&self->sdk_config);
   g_free (self->arch);
   g_free (self->state_subdir);
   g_free (self->stop_at);
-  g_strfreev (self->cleanup);
-  g_strfreev (self->cleanup_platform);
   glnx_release_lock_file(&self->rofiles_file_lock);
 
   g_clear_pointer (&self->sources_dirs, g_ptr_array_unref);
@@ -579,19 +570,6 @@ builder_context_set_stop_at (BuilderContext *self,
   self->stop_at = g_strdup (module);
 }
 
-BuilderOptions *
-builder_context_get_options (BuilderContext *self)
-{
-  return self->options;
-}
-
-void
-builder_context_set_options (BuilderContext *self,
-                             BuilderOptions *option)
-{
-  g_set_object (&self->options, option);
-}
-
 int
 builder_context_get_jobs (BuilderContext *self)
 {
@@ -621,34 +599,6 @@ builder_context_set_delete_build_dirs (BuilderContext *self,
   self->delete_build_dirs = delete_build_dirs;
 }
 
-void
-builder_context_set_global_cleanup (BuilderContext *self,
-                                    const char    **cleanup)
-{
-  g_strfreev (self->cleanup);
-  self->cleanup = g_strdupv ((char **) cleanup);
-}
-
-const char **
-builder_context_get_global_cleanup (BuilderContext *self)
-{
-  return (const char **) self->cleanup;
-}
-
-void
-builder_context_set_global_cleanup_platform (BuilderContext *self,
-                                             const char    **cleanup)
-{
-  g_strfreev (self->cleanup_platform);
-  self->cleanup_platform = g_strdupv ((char **) cleanup);
-}
-
-const char **
-builder_context_get_global_cleanup_platform (BuilderContext *self)
-{
-  return (const char **) self->cleanup_platform;
-}
-
 gboolean
 builder_context_get_keep_build_dirs (BuilderContext *self)
 {
@@ -672,45 +622,6 @@ gboolean
 builder_context_get_sandboxed (BuilderContext *self)
 {
   return self->sandboxed;
-}
-
-gboolean
-builder_context_get_build_runtime (BuilderContext *self)
-{
-  return self->build_runtime;
-}
-
-void
-builder_context_set_build_runtime (BuilderContext *self,
-                                   gboolean        build_runtime)
-{
-  self->build_runtime = !!build_runtime;
-}
-
-gboolean
-builder_context_get_build_extension (BuilderContext *self)
-{
-  return self->build_extension;
-}
-
-void
-builder_context_set_build_extension (BuilderContext *self,
-                                     gboolean        build_extension)
-{
-  self->build_extension = !!build_extension;
-}
-
-gboolean
-builder_context_get_separate_locales (BuilderContext *self)
-{
-  return self->separate_locales;
-}
-
-void
-builder_context_set_separate_locales (BuilderContext *self,
-                                      gboolean        separate_locales)
-{
-  self->separate_locales = !!separate_locales;
 }
 
 gboolean

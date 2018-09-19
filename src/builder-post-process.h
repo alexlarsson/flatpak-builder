@@ -23,6 +23,7 @@
 
 #include "builder-cache.h"
 #include "builder-context.h"
+#include "builder-types.h"
 
 G_BEGIN_DECLS
 
@@ -37,6 +38,7 @@ typedef enum {
 gboolean builder_post_process (BuilderPostProcessFlags   flags,
                                GFile                    *app_dir,
                                BuilderCache             *cache,
+                               BuilderManifest *manifest,
                                BuilderContext           *context,
                                GError                  **error);
 

@@ -113,7 +113,8 @@ builder_source_shell_download (BuilderSource  *source,
 }
 
 static gboolean
-run_script (BuilderContext *context,
+run_script (BuilderManifest *manifest,
+            BuilderContext *context,
             BuilderOptions *build_options,
             GFile          *source_dir,
             const gchar    *script,
@@ -128,7 +129,7 @@ run_script (BuilderContext *context,
   g_auto(GStrv) env = NULL;
   int i;
 
-  env = builder_options_get_env (build_options, context);
+  env = builder_options_get_env (build_options, manifest, context);
 
   args = g_ptr_array_new_with_free_func (g_free);
   g_ptr_array_add (args, g_strdup ("flatpak"));
@@ -146,7 +147,7 @@ run_script (BuilderContext *context,
         g_ptr_array_add (args, g_strdup_printf ("--env=%s", env[i]));
     }
 
-  build_args = builder_options_get_build_args (build_options, context, error);
+  build_args = builder_options_get_build_args (build_options, manifest, context, error);
   if (build_args == NULL)
     return FALSE;
 
@@ -169,6 +170,7 @@ static gboolean
 builder_source_shell_extract (BuilderSource  *source,
                               GFile          *dest,
                               BuilderOptions *build_options,
+                              BuilderManifest *manifest,
                               BuilderContext *context,
                               GError        **error)
 {
@@ -179,7 +181,7 @@ builder_source_shell_extract (BuilderSource  *source,
     {
       for (i = 0; self->commands[i] != NULL; i++)
         {
-          if (!run_script (context, build_options,
+          if (!run_script (manifest, context, build_options,
                            dest, self->commands[i], error))
             return FALSE;
         }

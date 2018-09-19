@@ -154,6 +154,7 @@ static gboolean
 builder_source_real_extract (BuilderSource  *self,
                              GFile          *dest,
                              BuilderOptions *build_options,
+                             BuilderManifest *manifest,
                              BuilderContext *context,
                              GError        **error)
 {
@@ -346,6 +347,7 @@ gboolean
 builder_source_extract (BuilderSource  *self,
                         GFile          *dest,
                         BuilderOptions *build_options,
+                        BuilderManifest *manifest,
                         BuilderContext *context,
                         GError        **error)
 {
@@ -369,7 +371,7 @@ builder_source_extract (BuilderSource  *self,
     }
 
 
-  return class->extract (self, real_dest, build_options, context, error);
+  return class->extract (self, real_dest, build_options, manifest, context, error);
 }
 
 gboolean

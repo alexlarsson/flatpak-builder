@@ -32,6 +32,7 @@
 #include "builder-context.h"
 #include "builder-utils.h"
 #include "builder-checksum.h"
+#include "builder-manifest.h"
 
 struct BuilderOptions
 {
@@ -793,10 +794,10 @@ get_arched_options (BuilderOptions *self, BuilderContext *context)
 }
 
 static GList *
-get_all_options (BuilderOptions *self, BuilderContext *context)
+get_all_options (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context)
 {
   GList *options = NULL;
-  BuilderOptions *global_options = builder_context_get_options (context);
+  BuilderOptions *global_options = builder_manifest_get_options (manifest);
 
   if (self)
     options = get_arched_options (self, context);
@@ -809,12 +810,13 @@ get_all_options (BuilderOptions *self, BuilderContext *context)
 
 static const char *
 builder_options_get_flags (BuilderOptions *self,
+                           BuilderManifest *manifest,
                            BuilderContext *context,
                            size_t          field_offset,
                            size_t          override_field_offset,
                            const char     *sdk_flags)
 {
-  g_autoptr(GList) options = get_all_options (self, context);
+  g_autoptr(GList) options = get_all_options (self, manifest, context);
   GList *l;
   GString *flags = NULL;
 
@@ -863,41 +865,41 @@ get_sdk_flags (BuilderOptions *self, BuilderContext *context, const char *(*meth
 }
 
 const char *
-builder_options_get_cflags (BuilderOptions *self, BuilderContext *context)
+builder_options_get_cflags (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context)
 {
-  return builder_options_get_flags (self, context, G_STRUCT_OFFSET (BuilderOptions, cflags),
+  return builder_options_get_flags (self, manifest, context, G_STRUCT_OFFSET (BuilderOptions, cflags),
                                     G_STRUCT_OFFSET (BuilderOptions, cflags_override),
                                     get_sdk_flags (self, context, builder_sdk_config_get_cflags));
 }
 
 const char *
-builder_options_get_cxxflags (BuilderOptions *self, BuilderContext *context)
+builder_options_get_cxxflags (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context)
 {
-  return builder_options_get_flags (self, context, G_STRUCT_OFFSET (BuilderOptions, cxxflags),
+  return builder_options_get_flags (self, manifest, context, G_STRUCT_OFFSET (BuilderOptions, cxxflags),
                                     G_STRUCT_OFFSET (BuilderOptions, cxxflags_override),
                                     get_sdk_flags (self, context, builder_sdk_config_get_cxxflags));
 }
 
 const char *
-builder_options_get_cppflags (BuilderOptions *self, BuilderContext *context)
+builder_options_get_cppflags (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context)
 {
-  return builder_options_get_flags (self, context, G_STRUCT_OFFSET (BuilderOptions, cppflags),
+  return builder_options_get_flags (self, manifest, context, G_STRUCT_OFFSET (BuilderOptions, cppflags),
                                     G_STRUCT_OFFSET (BuilderOptions, cppflags_override),
                                     get_sdk_flags (self, context, builder_sdk_config_get_cppflags));
 }
 
 const char *
-builder_options_get_ldflags (BuilderOptions *self, BuilderContext *context)
+builder_options_get_ldflags (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context)
 {
-  return builder_options_get_flags (self, context, G_STRUCT_OFFSET (BuilderOptions, ldflags),
+  return builder_options_get_flags (self, manifest, context, G_STRUCT_OFFSET (BuilderOptions, ldflags),
                                     G_STRUCT_OFFSET (BuilderOptions, ldflags_override),
                                     get_sdk_flags (self, context, builder_sdk_config_get_ldflags));
 }
 
 static char *
-builder_options_get_appended_path (BuilderOptions *self, BuilderContext *context, const char *initial_value, size_t append_field_offset, size_t prepend_field_offset)
+builder_options_get_appended_path (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context, const char *initial_value, size_t append_field_offset, size_t prepend_field_offset)
 {
-  g_autoptr(GList) options = get_all_options (self, context);
+  g_autoptr(GList) options = get_all_options (self, manifest, context);
   GList *l;
   GString *path_list = NULL;
 
@@ -940,7 +942,7 @@ builder_options_get_appended_path (BuilderOptions *self, BuilderContext *context
 }
 
 static char **
-builder_options_update_ld_path (BuilderOptions *self, BuilderContext *context, char **envp)
+builder_options_update_ld_path (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context, char **envp)
 {
   g_autofree char *path = NULL;
   const char *old = NULL;
@@ -949,7 +951,7 @@ builder_options_update_ld_path (BuilderOptions *self, BuilderContext *context, c
   if (old == NULL)
     old = "/app/lib";
 
-  path = builder_options_get_appended_path (self, context, old,
+  path = builder_options_get_appended_path (self, manifest, context, old,
                                             G_STRUCT_OFFSET (BuilderOptions, append_ld_library_path),
                                             G_STRUCT_OFFSET (BuilderOptions, prepend_ld_library_path));
   if (path)
@@ -959,7 +961,7 @@ builder_options_update_ld_path (BuilderOptions *self, BuilderContext *context, c
 }
 
 static char **
-builder_options_update_pkg_config_path (BuilderOptions *self, BuilderContext *context, char **envp)
+builder_options_update_pkg_config_path (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context, char **envp)
 {
   g_autofree char *path = NULL;
   const char *old = NULL;
@@ -968,7 +970,7 @@ builder_options_update_pkg_config_path (BuilderOptions *self, BuilderContext *co
   if (old == NULL)
     old = "/app/lib/pkgconfig:/app/share/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig";
 
-  path = builder_options_get_appended_path (self, context, old,
+  path = builder_options_get_appended_path (self, manifest, context, old,
                                             G_STRUCT_OFFSET (BuilderOptions, append_pkg_config_path),
                                             G_STRUCT_OFFSET (BuilderOptions, prepend_pkg_config_path));
   if (path)
@@ -978,10 +980,10 @@ builder_options_update_pkg_config_path (BuilderOptions *self, BuilderContext *co
 }
 
 static char **
-builder_options_update_path (BuilderOptions *self, BuilderContext *context, char **envp)
+builder_options_update_path (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context, char **envp)
 {
   g_autofree char *path = NULL;
-  path = builder_options_get_appended_path (self, context,
+  path = builder_options_get_appended_path (self, manifest, context,
                                             g_environ_getenv (envp, "PATH"),
                                             G_STRUCT_OFFSET (BuilderOptions, append_path),
                                             G_STRUCT_OFFSET (BuilderOptions, prepend_path));
@@ -991,9 +993,9 @@ builder_options_update_path (BuilderOptions *self, BuilderContext *context, char
 }
 
 const char *
-builder_options_get_prefix (BuilderOptions *self, BuilderContext *context)
+builder_options_get_prefix (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context)
 {
-  g_autoptr(GList) options = get_all_options (self, context);
+  g_autoptr(GList) options = get_all_options (self, manifest, context);
   GList *l;
 
   for (l = options; l != NULL; l = l->next)
@@ -1003,16 +1005,16 @@ builder_options_get_prefix (BuilderOptions *self, BuilderContext *context)
         return o->prefix;
     }
 
-  if (builder_context_get_build_runtime (context))
+  if (builder_manifest_get_build_runtime (manifest))
     return "/usr";
 
   return "/app";
 }
 
 const char *
-builder_options_get_libdir (BuilderOptions *self, BuilderContext *context)
+builder_options_get_libdir (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context)
 {
-  g_autoptr(GList) options = get_all_options (self, context);
+  g_autoptr(GList) options = get_all_options (self, manifest, context);
   GList *l;
 
   for (l = options; l != NULL; l = l->next)
@@ -1022,16 +1024,16 @@ builder_options_get_libdir (BuilderOptions *self, BuilderContext *context)
         return o->libdir;
     }
 
-  if (builder_context_get_build_runtime (context))
+  if (builder_manifest_get_build_runtime (manifest))
     return get_sdk_flags (self, context, builder_sdk_config_get_libdir);
 
   return NULL;
 }
 
 gboolean
-builder_options_get_strip (BuilderOptions *self, BuilderContext *context)
+builder_options_get_strip (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context)
 {
-  g_autoptr(GList) options = get_all_options (self, context);
+  g_autoptr(GList) options = get_all_options (self, manifest, context);
   GList *l;
 
   for (l = options; l != NULL; l = l->next)
@@ -1045,9 +1047,9 @@ builder_options_get_strip (BuilderOptions *self, BuilderContext *context)
 }
 
 gboolean
-builder_options_get_no_debuginfo (BuilderOptions *self, BuilderContext *context)
+builder_options_get_no_debuginfo (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context)
 {
-  g_autoptr(GList) options = get_all_options (self, context);
+  g_autoptr(GList) options = get_all_options (self, manifest, context);
   GList *l;
 
   for (l = options; l != NULL; l = l->next)
@@ -1061,9 +1063,9 @@ builder_options_get_no_debuginfo (BuilderOptions *self, BuilderContext *context)
 }
 
 gboolean
-builder_options_get_no_debuginfo_compression (BuilderOptions *self, BuilderContext *context)
+builder_options_get_no_debuginfo_compression (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context)
 {
-  g_autoptr(GList) options = get_all_options (self, context);
+  g_autoptr(GList) options = get_all_options (self, manifest, context);
   GList *l;
 
   for (l = options; l != NULL; l = l->next)
@@ -1077,9 +1079,9 @@ builder_options_get_no_debuginfo_compression (BuilderOptions *self, BuilderConte
 }
 
 char **
-builder_options_get_env (BuilderOptions *self, BuilderContext *context)
+builder_options_get_env (BuilderOptions *self, BuilderManifest *manifest, BuilderContext *context)
 {
-  g_autoptr(GList) options = get_all_options (self, context);
+  g_autoptr(GList) options = get_all_options (self, manifest, context);
   GList *l;
   int i;
   char **envp = NULL;
@@ -1115,35 +1117,36 @@ builder_options_get_env (BuilderOptions *self, BuilderContext *context)
 
   envp = builder_context_extend_env (context, envp);
 
-  cflags = builder_options_get_cflags (self, context);
+  cflags = builder_options_get_cflags (self, manifest, context);
   if (cflags)
     envp = g_environ_setenv (envp, "CFLAGS", cflags, FALSE);
 
-  cppflags = builder_options_get_cppflags (self, context);
+  cppflags = builder_options_get_cppflags (self, manifest, context);
   if (cppflags)
     envp = g_environ_setenv (envp, "CPPFLAGS", cppflags, FALSE);
 
-  cxxflags = builder_options_get_cxxflags (self, context);
+  cxxflags = builder_options_get_cxxflags (self, manifest, context);
   if (cxxflags)
     envp = g_environ_setenv (envp, "CXXFLAGS", cxxflags, FALSE);
 
-  ldflags = builder_options_get_ldflags (self, context);
+  ldflags = builder_options_get_ldflags (self, manifest, context);
   if (ldflags)
     envp = g_environ_setenv (envp, "LDFLAGS", ldflags, FALSE);
 
-  envp = builder_options_update_path (self, context, envp);
-  envp = builder_options_update_ld_path (self, context, envp);
-  envp = builder_options_update_pkg_config_path (self, context, envp);
+  envp = builder_options_update_path (self, manifest, context, envp);
+  envp = builder_options_update_ld_path (self, manifest, context, envp);
+  envp = builder_options_update_pkg_config_path (self, manifest, context, envp);
 
   return envp;
 }
 
 char **
 builder_options_get_build_args (BuilderOptions *self,
+                                BuilderManifest *manifest,
                                 BuilderContext *context,
                                 GError **error)
 {
-  g_autoptr(GList) options = get_all_options (self, context);
+  g_autoptr(GList) options = get_all_options (self, manifest, context);
   GList *l;
   int i;
   g_autoptr(GPtrArray) array = g_ptr_array_new_with_free_func (g_free);
@@ -1182,10 +1185,11 @@ builder_options_get_build_args (BuilderOptions *self,
 
 char **
 builder_options_get_test_args (BuilderOptions *self,
+                               BuilderManifest *manifest,
                                BuilderContext *context,
                                GError **error)
 {
-  g_autoptr(GList) options = get_all_options (self, context);
+  g_autoptr(GList) options = get_all_options (self, manifest, context);
   GList *l;
   int i;
   g_autoptr(GPtrArray) array = g_ptr_array_new_with_free_func (g_free);
@@ -1220,11 +1224,12 @@ builder_options_get_test_args (BuilderOptions *self,
 
 static char **
 builder_options_get_strv (BuilderOptions *self,
+                          BuilderManifest *manifest,
                           BuilderContext *context,
                           char          **base,
                           size_t          field_offset)
 {
-  g_autoptr(GList) options = get_all_options (self, context);
+  g_autoptr(GList) options = get_all_options (self, manifest, context);
   GList *l;
   int i;
   g_autoptr(GPtrArray) array = g_ptr_array_new_with_free_func (g_free);
@@ -1258,26 +1263,29 @@ builder_options_get_strv (BuilderOptions *self,
 
 char **
 builder_options_get_config_opts (BuilderOptions *self,
+                                 BuilderManifest *manifest,
                                  BuilderContext *context,
                                  char          **base_opts)
 {
-  return builder_options_get_strv (self, context, base_opts, G_STRUCT_OFFSET (BuilderOptions, config_opts));
+  return builder_options_get_strv (self, manifest, context, base_opts, G_STRUCT_OFFSET (BuilderOptions, config_opts));
 }
 
 char **
 builder_options_get_make_args (BuilderOptions *self,
+                               BuilderManifest *manifest,
                                BuilderContext *context,
                                char          **base_args)
 {
-  return builder_options_get_strv (self, context, base_args, G_STRUCT_OFFSET (BuilderOptions, make_args));
+  return builder_options_get_strv (self, manifest, context, base_args, G_STRUCT_OFFSET (BuilderOptions, make_args));
 }
 
 char **
 builder_options_get_make_install_args (BuilderOptions *self,
+                                       BuilderManifest *manifest,
                                        BuilderContext *context,
                                        char          **base_args)
 {
-  return builder_options_get_strv (self, context, base_args, G_STRUCT_OFFSET (BuilderOptions, make_install_args));
+  return builder_options_get_strv (self, manifest, context, base_args, G_STRUCT_OFFSET (BuilderOptions, make_install_args));
 }
 
 void

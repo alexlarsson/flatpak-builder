@@ -1449,6 +1449,42 @@ builder_manifest_get_extension_tag (BuilderManifest *self)
   return self->extension_tag;
 }
 
+gboolean
+builder_manifest_get_separate_locales (BuilderManifest *self)
+{
+  return self->separate_locales;
+}
+
+BuilderOptions *
+builder_manifest_get_options (BuilderManifest *self)
+{
+  return self->build_options;
+}
+
+gboolean
+builder_manifest_get_build_runtime (BuilderManifest *self)
+{
+  return self->build_runtime;
+}
+
+gboolean
+builder_manifest_get_build_extension (BuilderManifest *self)
+{
+  return self->build_extension;
+}
+
+const char **
+builder_manifest_get_cleanup (BuilderManifest *self)
+{
+  return (const char **) self->cleanup;
+}
+
+const char **
+builder_manifest_get_cleanup_platform (BuilderManifest *self)
+{
+  return (const char **) self->cleanup_platform;
+}
+
 static const char *
 builder_manifest_get_base_version (BuilderManifest *self)
 {
@@ -1731,7 +1767,7 @@ builder_manifest_init_app_dir (BuilderManifest *self,
 
   /* Fix up any python timestamps from base */
   if (!builder_post_process (BUILDER_POST_PROCESS_FLAGS_PYTHON_TIMESTAMPS, app_dir,
-                             cache, context, error))
+                             cache, self, context, error))
     return FALSE;
 
   return TRUE;
@@ -1985,20 +2021,6 @@ builder_manifest_download (BuilderManifest *self,
   return TRUE;
 }
 
-static gboolean
-setup_context (BuilderManifest *self,
-               BuilderContext  *context,
-               GError         **error)
-{
-  builder_context_set_options (context, self->build_options);
-  builder_context_set_global_cleanup (context, (const char **) self->cleanup);
-  builder_context_set_global_cleanup_platform (context, (const char **) self->cleanup_platform);
-  builder_context_set_build_runtime (context, self->build_runtime);
-  builder_context_set_build_extension (context, self->build_extension);
-  builder_context_set_separate_locales (context, self->separate_locales);
-  return TRUE;
-}
-
 gboolean
 builder_manifest_build_shell (BuilderManifest *self,
                               BuilderContext  *context,
@@ -2010,9 +2032,6 @@ builder_manifest_build_shell (BuilderManifest *self,
   BuilderModule *found = NULL;
 
   if (!builder_context_enable_rofiles (context, error))
-    return FALSE;
-
-  if (!setup_context (self, context, error))
     return FALSE;
 
   enabled_modules = builder_manifest_get_enabled_modules (self, context);
@@ -2046,9 +2065,6 @@ builder_manifest_build (BuilderManifest *self,
   g_autoptr(GList) enabled_modules = NULL;
   const char *stop_at = builder_context_get_stop_at (context);
   GList *l;
-
-  if (!setup_context (self, context, error))
-    return FALSE;
 
   g_print ("Starting build of %s\n", self->id ? self->id : "app");
   enabled_modules = builder_manifest_get_enabled_modules (self, context);
@@ -2471,10 +2487,10 @@ builder_manifest_cleanup (BuilderManifest *self,
 
       if (self->cleanup_commands)
         {
-          g_auto(GStrv) build_args = builder_options_get_build_args (self->build_options, context, error);
+          g_auto(GStrv) build_args = builder_options_get_build_args (self->build_options, self, context, error);
           if (!build_args)
             return FALSE;
-          env = builder_options_get_env (self->build_options, context);
+          env = builder_options_get_env (self->build_options, self, context);
           for (i = 0; self->cleanup_commands[i] != NULL; i++)
             {
               if (!command (app_dir, env, build_args, self->cleanup_commands[i], error))
@@ -3359,8 +3375,8 @@ builder_manifest_create_platform (BuilderManifest *self,
 
       if (self->prepare_platform_commands)
         {
-          g_auto(GStrv) env = builder_options_get_env (self->build_options, context);
-          g_auto(GStrv) build_args = builder_options_get_build_args (self->build_options, context, error);
+          g_auto(GStrv) env = builder_options_get_env (self->build_options, self, context);
+          g_auto(GStrv) build_args = builder_options_get_build_args (self->build_options, self, context, error);
           if (!build_args)
             return FALSE;
           char *platform_args[] = { "--sdk-dir=platform", "--metadata=metadata.platform", NULL };
@@ -3478,8 +3494,8 @@ builder_manifest_create_platform (BuilderManifest *self,
 
       if (self->cleanup_platform_commands)
         {
-          g_auto(GStrv) env = builder_options_get_env (self->build_options, context);
-          g_auto(GStrv) build_args = builder_options_get_build_args (self->build_options, context, error);
+          g_auto(GStrv) env = builder_options_get_env (self->build_options, self, context);
+          g_auto(GStrv) build_args = builder_options_get_build_args (self->build_options, self, context, error);
           if (!build_args)
             return FALSE;
           char *platform_args[] = { "--sdk-dir=platform", "--metadata=metadata.platform", NULL };
@@ -3923,14 +3939,14 @@ builder_manifest_run (BuilderManifest *self,
       g_ptr_array_add (args, g_strdup_printf ("--bind-mount=/run/ccache=%s", ccache_dir_path));
     }
 
-  build_args = builder_options_get_build_args (self->build_options, context, error);
+  build_args = builder_options_get_build_args (self->build_options, self, context, error);
   if (build_args == NULL)
     return FALSE;
 
   for (i = 0; build_args[i] != NULL; i++)
     g_ptr_array_add (args, g_strdup (build_args[i]));
 
-  env = builder_options_get_env (self->build_options, context);
+  env = builder_options_get_env (self->build_options, self, context);
   if (env)
     {
       for (i = 0; env[i] != NULL; i++)

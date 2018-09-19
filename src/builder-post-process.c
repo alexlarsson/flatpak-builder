@@ -33,6 +33,7 @@
 #include "builder-flatpak-utils.h"
 #include "builder-utils.h"
 #include "builder-post-process.h"
+#include "builder-manifest.h"
 
 static gboolean
 invalidate_old_python_compiled (const char *path,
@@ -338,11 +339,12 @@ builder_post_process_strip (GFile *app_dir,
 }
 
 static gboolean
-builder_post_process_debuginfo (GFile          *app_dir,
-                                GPtrArray      *changed,
-				BuilderPostProcessFlags flags,
-                                BuilderContext *context,
-                                GError        **error)
+builder_post_process_debuginfo (GFile                   *app_dir,
+                                GPtrArray              *changed,
+                                BuilderPostProcessFlags flags,
+                                BuilderManifest         *manifest,
+                                BuilderContext          *context,
+                                GError                 **error)
 {
   g_autofree char *app_dir_path = g_file_get_path (app_dir);
   int j;
@@ -401,7 +403,7 @@ builder_post_process_debuginfo (GFile          *app_dir,
               return FALSE;
             }
 
-          if (builder_context_get_build_runtime (context))
+          if (builder_manifest_get_build_runtime (manifest))
             builddir = "/run/build-runtime/";
           else
             builddir = "/run/build/";
@@ -490,6 +492,7 @@ gboolean
 builder_post_process (BuilderPostProcessFlags flags,
                       GFile *app_dir,
                       BuilderCache   *cache,
+                      BuilderManifest *manifest,
                       BuilderContext *context,
                       GError        **error)
 {
@@ -511,7 +514,7 @@ builder_post_process (BuilderPostProcessFlags flags,
     }
   else if (flags & BUILDER_POST_PROCESS_FLAGS_DEBUGINFO)
     {
-      if (!builder_post_process_debuginfo (app_dir, changed, flags, context, error))
+      if (!builder_post_process_debuginfo (app_dir, changed, flags, manifest, context, error))
         return FALSE;
     }
 

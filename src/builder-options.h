@@ -23,6 +23,7 @@
 
 #include <json-glib/json-glib.h>
 #include "builder-cache.h"
+#include "builder-types.h"
 
 G_BEGIN_DECLS
 
@@ -38,42 +39,57 @@ typedef struct BuilderOptions BuilderOptions;
 GType builder_options_get_type (void);
 
 const char *builder_options_get_cflags (BuilderOptions *self,
+                                        BuilderManifest *manifest,
                                         BuilderContext *context);
 const char *builder_options_get_cxxflags (BuilderOptions *self,
+                                          BuilderManifest *manifest,
                                           BuilderContext *context);
 const char *builder_options_get_cppflags (BuilderOptions *self,
+                                          BuilderManifest *manifest,
                                           BuilderContext *context);
 const char *builder_options_get_ldflags (BuilderOptions *self,
+                                         BuilderManifest *manifest,
                                          BuilderContext *context);
 const char *builder_options_get_prefix (BuilderOptions *self,
+                                        BuilderManifest *manifest,
                                         BuilderContext *context);
 const char *builder_options_get_libdir (BuilderOptions *self,
+                                        BuilderManifest *manifest,
                                         BuilderContext *context);
 char **     builder_options_get_env (BuilderOptions *self,
+                                     BuilderManifest *manifest,
                                      BuilderContext *context);
 char **     builder_options_get_build_args (BuilderOptions *self,
+                                            BuilderManifest *manifest,
                                             BuilderContext *context,
                                             GError **error);
 char **     builder_options_get_test_args (BuilderOptions *self,
-                                            BuilderContext *context,
-                                            GError **error);
+                                           BuilderManifest *manifest,
+                                           BuilderContext *context,
+                                           GError **error);
 char **     builder_options_get_config_opts (BuilderOptions *self,
+                                             BuilderManifest *manifest,
                                              BuilderContext *context,
                                              char          **base_opts);
 char **     builder_options_get_make_args (BuilderOptions *self,
+                                           BuilderManifest *manifest,
                                            BuilderContext *context,
                                            char          **base_args);
 char **     builder_options_get_make_install_args (BuilderOptions *self,
+                                                   BuilderManifest *manifest,
                                                    BuilderContext *context,
                                                    char          **base_args);
 void        builder_options_checksum (BuilderOptions *self,
                                       GChecksum      *checksum,
                                       BuilderContext *context);
 gboolean    builder_options_get_no_debuginfo (BuilderOptions *self,
+                                              BuilderManifest *manifest,
                                               BuilderContext *context);
 gboolean    builder_options_get_no_debuginfo_compression (BuilderOptions *self,
-							  BuilderContext *context);
+                                                          BuilderManifest *manifest,
+                                                          BuilderContext *context);
 gboolean    builder_options_get_strip (BuilderOptions *self,
+                                       BuilderManifest *manifest,
                                        BuilderContext *context);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (BuilderOptions, g_object_unref)

@@ -633,6 +633,7 @@ static gboolean
 builder_source_archive_extract (BuilderSource  *source,
                                 GFile          *dest,
                                 BuilderOptions *build_options,
+                                BuilderManifest *manifest,
                                 BuilderContext *context,
                                 GError        **error)
 {

@@ -173,6 +173,7 @@ static gboolean
 builder_source_extra_data_extract (BuilderSource  *source,
                                    GFile          *dest,
                                    BuilderOptions *build_options,
+                                   BuilderManifest *manifest,
                                    BuilderContext *context,
                                    GError        **error)
 {

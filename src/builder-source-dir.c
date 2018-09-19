@@ -193,6 +193,7 @@ static gboolean
 builder_source_dir_extract (BuilderSource  *source,
                             GFile          *dest,
                             BuilderOptions *build_options,
+                            BuilderManifest *manifest,
                             BuilderContext *context,
                             GError        **error)
 {

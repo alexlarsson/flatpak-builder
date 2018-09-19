@@ -69,7 +69,12 @@ const char *    builder_manifest_get_collection_id (BuilderManifest *self);
 const char *    builder_manifest_get_extension_tag (BuilderManifest *self);
 void            builder_manifest_set_default_collection_id (BuilderManifest *self,
                                                             const char      *default_collection_id);
-
+gboolean        builder_manifest_get_separate_locales (BuilderManifest *self);
+BuilderOptions *builder_manifest_get_options (BuilderManifest *self);
+gboolean        builder_manifest_get_build_runtime (BuilderManifest *self);
+gboolean        builder_manifest_get_build_extension (BuilderManifest *self);
+const char **   builder_manifest_get_cleanup (BuilderManifest *self);
+const char **   builder_manifest_get_cleanup_platform (BuilderManifest *self);
 
 char **         builder_manifest_get_exclude_dirs (BuilderManifest *self);
 

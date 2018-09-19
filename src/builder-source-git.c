@@ -270,6 +270,7 @@ static gboolean
 builder_source_git_extract (BuilderSource  *source,
                             GFile          *dest,
                             BuilderOptions *build_options,
+                            BuilderManifest *manifest,
                             BuilderContext *context,
                             GError        **error)
 {
