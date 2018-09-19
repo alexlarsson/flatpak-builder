@@ -108,7 +108,6 @@ struct BuilderManifest
   char           *command;
   BuilderOptions *build_options;
   GList          *modules;
-  GList          *expanded_modules;
   GList          *add_extensions;
   GList          *add_build_extensions;
 };
@@ -201,7 +200,6 @@ builder_manifest_finalize (GObject *object)
   g_list_free_full (self->modules, g_object_unref);
   g_list_free_full (self->add_extensions, g_object_unref);
   g_list_free_full (self->add_build_extensions, g_object_unref);
-  g_list_free (self->expanded_modules);
   g_strfreev (self->cleanup);
   g_strfreev (self->cleanup_commands);
   g_strfreev (self->cleanup_platform);
@@ -222,27 +220,22 @@ builder_manifest_finalize (GObject *object)
 }
 
 static gboolean
-expand_modules (BuilderContext *context, GList *modules,
-                GList **expanded, GHashTable *names, GError **error)
+init_modules (BuilderManifest *manifest,
+              GList *modules,
+              GHashTable *names,
+              GError **error)
 {
   GList *l;
 
   for (l = modules; l; l = l->next)
     {
       BuilderModule *m = l->data;
-      GList *submodules = NULL;
       const char *name;
 
-      if (!builder_module_is_enabled (m, context))
-        continue;
-
-      if (!expand_modules (context, builder_module_get_modules (m), &submodules, names, error))
+      if (!init_modules (manifest, builder_module_get_modules (m), names, error))
         return FALSE;
 
-      *expanded = g_list_concat (*expanded, submodules);
-
       name = builder_module_get_name (m);
-
       if (name == NULL)
         {
           /* FIXME: We'd like to report *something* for the user
@@ -259,8 +252,8 @@ expand_modules (BuilderContext *context, GList *modules,
                        "Duplicate modules named '%s'", name);
           return FALSE;
         }
+
       g_hash_table_insert (names, (char *)name, (char *)name);
-      *expanded = g_list_append (*expanded, m);
     }
 
   return TRUE;
@@ -274,6 +267,7 @@ builder_manifest_load (GFile *file,
   g_autoptr(GFile) base_dir = g_file_get_parent (file);
   g_autofree char *basename = g_file_get_basename (file);
   g_autofree gchar *contents = NULL;
+  g_autoptr(GHashTable) names = g_hash_table_new (g_str_hash, g_str_equal);
 
   if (!g_file_get_contents (flatpak_file_get_path_cached (file), &contents, NULL, error))
     return NULL;
@@ -287,6 +281,9 @@ builder_manifest_load (GFile *file,
   _builder_manifest_set_demarshal_base_dir (NULL);
 
   if (manifest == NULL)
+    return NULL;
+
+  if (!init_modules (manifest, manifest->modules, names, error))
     return NULL;
 
   manifest->manifest_contents = g_steal_pointer (&contents);
@@ -1561,7 +1558,6 @@ builder_manifest_start (BuilderManifest *self,
                         GError         **error)
 {
   g_autofree char *arch_option = NULL;
-  g_autoptr(GHashTable) names = g_hash_table_new (g_str_hash, g_str_equal);
   g_autofree char *sdk_path = NULL;
   const char *stop_at;
 
@@ -1602,11 +1598,8 @@ builder_manifest_start (BuilderManifest *self,
                              self->base, builder_manifest_get_base_version (self));
     }
 
-  if (!expand_modules (context, self->modules, &self->expanded_modules, names, error))
-    return FALSE;
-
   stop_at = builder_context_get_stop_at (context);
-  if (stop_at != NULL && g_hash_table_lookup (names, stop_at) == NULL)
+  if (stop_at != NULL && builder_manifest_get_module (self, stop_at) == NULL)
     return flatpak_fail (error, "No module named %s (specified with --stop-at)", stop_at);
 
   return TRUE;
@@ -1777,11 +1770,70 @@ builder_manifest_checksum (BuilderManifest *self,
     }
 }
 
+static BuilderModule *
+get_module (GList *modules, const char *name)
+{
+  GList *l;
+
+  for (l = modules; l; l = l->next)
+    {
+      BuilderModule *m = l->data;
+      const char *m_name;
+
+      m_name = builder_module_get_name (m);
+      if (strcmp (name, m_name) == 0)
+        return m;
+
+      m = get_module (builder_module_get_modules (m), name);
+      if (m != NULL)
+        return m;
+    }
+
+  return NULL;
+}
+
+BuilderModule *
+builder_manifest_get_module (BuilderManifest *self,
+                             const char *name)
+{
+  return get_module (self->modules, name);
+}
+
+static GList *
+get_enabled_modules (BuilderContext *context, GList *modules)
+{
+  GList *enabled = NULL;
+  GList *l;
+
+  for (l = modules; l; l = l->next)
+    {
+      BuilderModule *m = l->data;
+      GList *submodules = NULL;
+
+      if (!builder_module_is_enabled (m, context))
+        continue;
+
+      submodules = get_enabled_modules (context, builder_module_get_modules (m));
+
+      enabled = g_list_concat (enabled, submodules);
+      enabled = g_list_append (enabled, m);
+    }
+  return enabled;
+}
+
+GList *
+builder_manifest_get_enabled_modules (BuilderManifest *self,
+                                      BuilderContext  *context)
+{
+  return get_enabled_modules (context, self->modules);
+}
+
 static void
 builder_manifest_checksum_for_cleanup (BuilderManifest *self,
                                        GChecksum      *checksum,
                                        BuilderContext  *context)
 {
+  g_autoptr(GList) enabled_modules = NULL;
   GList *l;
 
   builder_checksum_str (checksum, BUILDER_MANIFEST_CHECKSUM_CLEANUP_VERSION);
@@ -1796,7 +1848,8 @@ builder_manifest_checksum_for_cleanup (BuilderManifest *self,
   builder_checksum_str (checksum, self->desktop_file_name_suffix);
   builder_checksum_boolean (checksum, self->appstream_compose);
 
-  for (l = self->expanded_modules; l != NULL; l = l->next)
+  enabled_modules = builder_manifest_get_enabled_modules (self, context);
+  for (l = enabled_modules; l != NULL; l = l->next)
     {
       BuilderModule *m = l->data;
       builder_module_checksum_for_cleanup (m, checksum, context);
@@ -1855,6 +1908,7 @@ builder_manifest_checksum_for_platform (BuilderManifest *self,
                                         GChecksum      *checksum,
                                         BuilderContext  *context)
 {
+  g_autoptr(GList) enabled_modules = NULL;
   GList *l;
 
   builder_checksum_str (checksum, BUILDER_MANIFEST_CHECKSUM_PLATFORM_VERSION);
@@ -1880,7 +1934,8 @@ builder_manifest_checksum_for_platform (BuilderManifest *self,
         g_warning ("Can't load metadata-platform file %s: %s", self->metadata_platform, my_error->message);
     }
 
-  for (l = self->expanded_modules; l != NULL; l = l->next)
+  enabled_modules = builder_manifest_get_enabled_modules (self, context);
+  for (l = enabled_modules; l != NULL; l = l->next)
     {
       BuilderModule *m = l->data;
       builder_module_checksum_for_platform (m, checksum, context);
@@ -1894,11 +1949,13 @@ builder_manifest_download (BuilderManifest *self,
                            BuilderContext  *context,
                            GError         **error)
 {
+  g_autoptr(GList) enabled_modules = NULL;
   const char *stop_at = builder_context_get_stop_at (context);
   GList *l;
 
   g_print ("Downloading sources\n");
-  for (l = self->expanded_modules; l != NULL; l = l->next)
+  enabled_modules = builder_manifest_get_enabled_modules (self, context);
+  for (l = enabled_modules; l != NULL; l = l->next)
     {
       BuilderModule *m = l->data;
       const char *name = builder_module_get_name (m);
@@ -1945,6 +2002,7 @@ builder_manifest_build_shell (BuilderManifest *self,
                               const char      *modulename,
                               GError         **error)
 {
+  g_autoptr(GList) enabled_modules = NULL;
   GList *l;
   BuilderModule *found = NULL;
 
@@ -1954,7 +2012,8 @@ builder_manifest_build_shell (BuilderManifest *self,
   if (!setup_context (self, context, error))
     return FALSE;
 
-  for (l = self->expanded_modules; l != NULL; l = l->next)
+  enabled_modules = builder_manifest_get_enabled_modules (self, context);
+  for (l = enabled_modules; l != NULL; l = l->next)
     {
       BuilderModule *m = l->data;
       const char *name = builder_module_get_name (m);
@@ -1981,6 +2040,7 @@ builder_manifest_build (BuilderManifest *self,
                         BuilderContext  *context,
                         GError         **error)
 {
+  g_autoptr(GList) enabled_modules = NULL;
   const char *stop_at = builder_context_get_stop_at (context);
   GList *l;
 
@@ -1988,7 +2048,8 @@ builder_manifest_build (BuilderManifest *self,
     return FALSE;
 
   g_print ("Starting build of %s\n", self->id ? self->id : "app");
-  for (l = self->expanded_modules; l != NULL; l = l->next)
+  enabled_modules = builder_manifest_get_enabled_modules (self, context);
+  for (l = enabled_modules; l != NULL; l = l->next)
     {
       BuilderModule *m = l->data;
       g_autoptr(GPtrArray) changes = NULL;
@@ -2391,6 +2452,7 @@ builder_manifest_cleanup (BuilderManifest *self,
   builder_manifest_checksum_for_cleanup (self, builder_cache_get_checksum (cache), context);
   if (!builder_cache_lookup (cache, "cleanup"))
     {
+      g_autoptr(GList) enabled_modules = NULL;
       g_autoptr(GHashTable) to_remove_ht = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
       g_autofree char **keys = NULL;
       GFile *app_dir = NULL;
@@ -2417,7 +2479,8 @@ builder_manifest_cleanup (BuilderManifest *self,
             }
         }
 
-      for (l = self->expanded_modules; l != NULL; l = l->next)
+      enabled_modules = builder_manifest_get_enabled_modules (self, context);
+      for (l = enabled_modules; l != NULL; l = l->next)
         {
           BuilderModule *m = l->data;
 
@@ -2733,6 +2796,7 @@ builder_manifest_finish (BuilderManifest *self,
   g_autoptr(GPtrArray) args = NULL;
   g_autoptr(GPtrArray) inherit_extensions = NULL;
   g_autoptr(GSubprocess) subp = NULL;
+  g_autoptr(GList) enabled_modules = NULL;
   int i;
   GList *l;
 
@@ -2916,7 +2980,8 @@ builder_manifest_finish (BuilderManifest *self,
       for (l = self->add_extensions; l != NULL; l = l->next)
         builder_extension_add_finish_args (l->data, args);
 
-      for (l = self->expanded_modules; l != NULL; l = l->next)
+      enabled_modules = builder_manifest_get_enabled_modules (self, context);
+      for (l = enabled_modules; l != NULL; l = l->next)
         {
           BuilderModule *m = l->data;
           builder_module_finish_sources (m, args, context);
@@ -3160,6 +3225,7 @@ builder_manifest_create_platform (BuilderManifest *self,
       GFile *app_dir = NULL;
       g_autofree char *ref = NULL;
       g_autoptr(GPtrArray) sub_ids = g_ptr_array_new_with_free_func (g_free);
+      g_autoptr(GList) enabled_modules = NULL;
 
       g_print ("Creating platform based on %s\n", self->runtime);
 
@@ -3304,7 +3370,8 @@ builder_manifest_create_platform (BuilderManifest *self,
             }
         }
 
-      for (l = self->expanded_modules; l != NULL; l = l->next)
+      enabled_modules = builder_manifest_get_enabled_modules (self, context);
+      for (l = enabled_modules; l != NULL; l = l->next)
         {
           BuilderModule *m = l->data;
 
@@ -3525,6 +3592,7 @@ builder_manifest_bundle_sources (BuilderManifest *self,
       g_autoptr(GKeyFile) metadata_keyfile = g_key_file_new ();
       g_autoptr(GPtrArray) subs = g_ptr_array_new ();
       g_auto(GStrv) old_subs = NULL;
+      g_autoptr(GList) enabled_modules = NULL;
       gsize i;
       GList *l;
 
@@ -3554,7 +3622,8 @@ builder_manifest_bundle_sources (BuilderManifest *self,
         return FALSE;
 
 
-      for (l = self->expanded_modules; l != NULL; l = l->next)
+      enabled_modules = builder_manifest_get_enabled_modules (self, context);
+      for (l = enabled_modules; l != NULL; l = l->next)
         {
           BuilderModule *m = l->data;
 
@@ -3610,12 +3679,11 @@ builder_manifest_show_deps (BuilderManifest *self,
                             GError         **error)
 {
   g_autoptr(GHashTable) names = g_hash_table_new (g_str_hash, g_str_equal);
+  g_autoptr(GList) enabled_modules = NULL;
   GList *l;
 
-  if (!expand_modules (context, self->modules, &self->expanded_modules, names, error))
-    return FALSE;
-
-  for (l = self->expanded_modules; l != NULL; l = l->next)
+  enabled_modules = builder_manifest_get_enabled_modules (self, context);
+  for (l = enabled_modules; l != NULL; l = l->next)
     {
       BuilderModule *module = l->data;
 
