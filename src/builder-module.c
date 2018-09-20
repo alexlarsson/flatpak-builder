@@ -1413,9 +1413,76 @@ find_file_with_extension (GFile *dir,
   return NULL;
 }
 
+static const char *
+buildsystem_get_make_cmd (BuilderBuildsystem buildsystem)
+{
+  if (buildsystem == BUILDER_BUILDSYSTEM_MESON || buildsystem == BUILDER_BUILDSYSTEM_CMAKE_NINJA)
+    return "ninja";
+  else if (buildsystem == BUILDER_BUILDSYSTEM_SIMPLE)
+    return NULL;
+  else
+    return "make";
+}
+
+static const char *
+buildsystem_get_test_arg (BuilderBuildsystem buildsystem)
+{
+  if (buildsystem == BUILDER_BUILDSYSTEM_MESON || buildsystem == BUILDER_BUILDSYSTEM_CMAKE_NINJA)
+    return "test";
+  else if (buildsystem == BUILDER_BUILDSYSTEM_SIMPLE)
+    return NULL;
+  else
+    return "check";
+}
+
+static gboolean
+should_use_builddir (BuilderModule  *self,
+                     BuilderBuildsystem buildsystem)
+{
+  return self->builddir || buildsystem == BUILDER_BUILDSYSTEM_MESON;
+}
+
+static GFile *
+get_source_subdir (BuilderModule  *self,
+                   GFile          *source_dir,
+                   const char    **source_subdir_relative_out)
+{
+  if (self->subdir != NULL && self->subdir[0] != 0)
+    {
+      *source_subdir_relative_out = self->subdir;
+      return g_file_resolve_relative_path (source_dir, self->subdir);
+    }
+  else
+    {
+      *source_subdir_relative_out = NULL;
+      return g_object_ref (source_dir);
+    }
+}
+
+static GFile *
+get_build_dir (BuilderModule  *self,
+                  BuilderBuildsystem buildsystem,
+                  GFile          *source_subdir,
+                  const char    *source_subdir_relative,
+                  char    **build_dir_relative_out)
+{
+  if (should_use_builddir (self, buildsystem))
+    {
+      if (source_subdir_relative)
+        *build_dir_relative_out = g_build_filename (source_subdir_relative, "_flatpak_build", NULL);
+      else
+        *build_dir_relative_out = g_strdup ("_flatpak_build");
+      return g_file_get_child (source_subdir, "_flatpak_build");
+    }
+  else
+    {
+      *build_dir_relative_out = g_strdup (source_subdir_relative);
+      return g_object_ref (source_subdir);
+    }
+}
+
 gboolean
 builder_module_build (BuilderModule  *self,
-                      BuilderCache   *cache,
                       BuilderContext *context,
                       GFile          *source_dir,
                       gboolean        run_shell,
@@ -1426,35 +1493,19 @@ builder_module_build (BuilderModule  *self,
   g_autofree char *make_l = NULL;
   g_autofree char *n_jobs = NULL;
   const char *make_cmd = NULL;
-  const char *test_arg = NULL;
-
-  gboolean autotools = FALSE, cmake = FALSE, cmake_ninja = FALSE, meson = FALSE, simple = FALSE, qmake = FALSE;
+  BuilderBuildsystem buildsystem;
   g_autoptr(GFile) configure_file = NULL;
   g_autoptr(GFile) build_dir = NULL;
   g_autofree char *build_dir_relative = NULL;
   gboolean has_configure = FALSE;
-  gboolean var_require_builddir;
-  gboolean use_builddir;
   int i;
   g_auto(GStrv) env = NULL;
   g_auto(GStrv) build_args = NULL;
   g_auto(GStrv) config_opts = NULL;
   g_autoptr(GFile) source_subdir = NULL;
   const char *source_subdir_relative = NULL;
-  g_autofree char *source_dir_path = NULL;
-  BuilderPostProcessFlags post_process_flags = 0;
 
-  source_dir_path = g_file_get_path (source_dir);
-
-  if (self->subdir != NULL && self->subdir[0] != 0)
-    {
-      source_subdir = g_file_resolve_relative_path (source_dir, self->subdir);
-      source_subdir_relative = self->subdir;
-    }
-  else
-    {
-      source_subdir = g_object_ref (source_dir);
-    }
+  source_subdir = get_source_subdir (self, source_dir, &source_subdir_relative);
 
   build_args = builder_options_get_build_args (self->build_options, self->manifest, context, error);
   if (build_args == NULL)
@@ -1466,33 +1517,11 @@ builder_module_build (BuilderModule  *self,
   n_jobs = g_strdup_printf ("%d", self->no_parallel_make ? 1 : builder_context_get_jobs (context));
   env = g_environ_setenv (env, "FLATPAK_BUILDER_N_JOBS", n_jobs, FALSE);
 
-  if (!self->buildsystem)
-    {
-      if (self->cmake)
-        cmake = TRUE;
-      else
-        autotools = TRUE;
-    }
-  else if (!strcmp (self->buildsystem, "cmake"))
-    cmake = TRUE;
-  else if (!strcmp (self->buildsystem, "meson"))
-    meson = TRUE;
-  else if (!strcmp (self->buildsystem, "autotools"))
-    autotools = TRUE;
-  else if (!strcmp (self->buildsystem, "cmake-ninja"))
-    cmake_ninja = TRUE;
-  else if (!strcmp (self->buildsystem, "simple"))
-    simple = TRUE;
-  else if (!strcmp (self->buildsystem, "qmake"))
-    qmake = TRUE;
-  else
-    {
-      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "module %s: Invalid buildsystem: \"%s\"",
-                   self->name, self->buildsystem);
-      return FALSE;
-    }
+  buildsystem = builder_module_get_buildsystem (self, error);
+  if (buildsystem == BUILDER_BUILDSYSTEM_INVALID)
+    return FALSE;
 
-  if (simple)
+  if (buildsystem == BUILDER_BUILDSYSTEM_SIMPLE)
     {
       if (!self->build_commands)
         {
@@ -1501,7 +1530,7 @@ builder_module_build (BuilderModule  *self,
           return FALSE;
         }
     }
-  else if (cmake || cmake_ninja)
+  else if (buildsystem == BUILDER_BUILDSYSTEM_CMAKE || buildsystem == BUILDER_BUILDSYSTEM_CMAKE_NINJA)
     {
       g_autoptr(GFile) cmake_file = NULL;
 
@@ -1513,7 +1542,7 @@ builder_module_build (BuilderModule  *self,
         }
       configure_file = g_object_ref (cmake_file);
     }
-  else if (meson)
+  else if (buildsystem == BUILDER_BUILDSYSTEM_MESON)
     {
       g_autoptr(GFile) meson_file = NULL;
 
@@ -1525,7 +1554,7 @@ builder_module_build (BuilderModule  *self,
         }
       configure_file = g_object_ref (meson_file);
     }
-  else if (qmake)
+  else if (buildsystem == BUILDER_BUILDSYSTEM_QMAKE)
     {
       configure_file = find_file_with_extension (source_subdir, ".pro");
       if (configure_file == NULL)
@@ -1534,7 +1563,7 @@ builder_module_build (BuilderModule  *self,
           return FALSE;
         }
     }
-  else if (autotools)
+  else if (buildsystem == BUILDER_BUILDSYSTEM_AUTOTOOLS)
     {
       configure_file = g_file_get_child (source_subdir, "configure");
 
@@ -1597,46 +1626,32 @@ builder_module_build (BuilderModule  *self,
       gchar *configure_final_arg = NULL;
       g_auto(GStrv) configure_args = NULL;
       g_autoptr(GPtrArray) configure_args_arr = g_ptr_array_new ();
-      g_autofree char *configure_content = NULL;
       const char *prefix = NULL;
       const char *libdir = NULL;
 
-      if (!g_file_load_contents (configure_file, NULL, &configure_content, NULL, NULL, error))
+      build_dir = get_build_dir (self, buildsystem, source_subdir, source_subdir_relative,
+                                 &build_dir_relative);
+      if (should_use_builddir (self, buildsystem))
         {
-          g_prefix_error (error, "module %s: ", self->name);
-          return FALSE;
-        }
-
-      var_require_builddir = strstr (configure_content, "buildapi-variable-require-builddir") != NULL;
-      use_builddir = var_require_builddir || self->builddir || meson;
-
-      if (use_builddir)
-        {
-          if (source_subdir_relative)
-            build_dir_relative = g_build_filename (source_subdir_relative, "_flatpak_build", NULL);
-          else
-            build_dir_relative = g_strdup ("_flatpak_build");
-          build_dir = g_file_get_child (source_subdir, "_flatpak_build");
-
           if (!g_file_make_directory (build_dir, NULL, error))
             {
               g_prefix_error (error, "module %s: ", self->name);
               return FALSE;
             }
 
-          if (cmake || cmake_ninja)
+          if (buildsystem == BUILDER_BUILDSYSTEM_CMAKE || buildsystem == BUILDER_BUILDSYSTEM_CMAKE_NINJA)
             {
               configure_cmd = "cmake";
               configure_final_arg = g_strdup("..");
             }
-          else if (qmake)
+          else if (buildsystem == BUILDER_BUILDSYSTEM_QMAKE)
             {
               g_autofree char *basename = g_file_get_basename (configure_file);
 
               configure_cmd = "qmake";
               configure_final_arg = g_strconcat ("../", basename, NULL);
             }
-          else if (meson)
+          else if (buildsystem == BUILDER_BUILDSYSTEM_MESON)
             {
               configure_cmd = "meson";
               configure_final_arg = g_strdup ("..");
@@ -1648,34 +1663,32 @@ builder_module_build (BuilderModule  *self,
         }
       else
         {
-          build_dir_relative = g_strdup (source_subdir_relative);
-          build_dir = g_object_ref (source_subdir);
-          if (cmake || cmake_ninja)
+          if (buildsystem == BUILDER_BUILDSYSTEM_CMAKE || buildsystem == BUILDER_BUILDSYSTEM_CMAKE_NINJA)
             {
               configure_cmd = "cmake";
               configure_final_arg = g_strdup (".");
             }
-          else if (qmake)
+          else if (buildsystem == BUILDER_BUILDSYSTEM_QMAKE)
             {
               configure_cmd = "qmake";
               configure_final_arg = g_file_get_basename (configure_file);
             }
           else
             {
-              g_assert (!meson);
+              g_assert (buildsystem != BUILDER_BUILDSYSTEM_MESON);
               configure_cmd = "./configure";
             }
         }
 
-      if (cmake)
+      if (buildsystem == BUILDER_BUILDSYSTEM_CMAKE)
         cmake_generator = "Unix Makefiles";
-      else if (cmake_ninja)
+      else if (buildsystem == BUILDER_BUILDSYSTEM_CMAKE_NINJA)
         cmake_generator = "Ninja";
 
       prefix = builder_options_get_prefix (self->build_options, self->manifest, context);
       libdir = builder_options_get_libdir (self->build_options, self->manifest, context);
 
-      if (cmake || cmake_ninja)
+      if (buildsystem == BUILDER_BUILDSYSTEM_CMAKE || buildsystem == BUILDER_BUILDSYSTEM_CMAKE_NINJA)
         {
           g_ptr_array_add (configure_args_arr, g_strdup_printf ("-DCMAKE_INSTALL_PREFIX:PATH='%s'", prefix));
           if (libdir)
@@ -1683,7 +1696,7 @@ builder_module_build (BuilderModule  *self,
           g_ptr_array_add (configure_args_arr, g_strdup ("-G"));
           g_ptr_array_add (configure_args_arr, g_strdup_printf ("%s", cmake_generator));
         }
-      else if (qmake)
+      else if (buildsystem == BUILDER_BUILDSYSTEM_QMAKE)
         {
           g_ptr_array_add (configure_args_arr, g_strdup_printf ("PREFIX='%s'", prefix));
           /* TODO: What parameter for qmake? */
@@ -1710,7 +1723,7 @@ builder_module_build (BuilderModule  *self,
       build_dir = g_object_ref (source_subdir);
     }
 
-  if (meson || cmake_ninja)
+  if (buildsystem == BUILDER_BUILDSYSTEM_MESON || buildsystem == BUILDER_BUILDSYSTEM_CMAKE_NINJA)
     {
       g_autoptr(GFile) ninja_file = g_file_get_child (build_dir, "build.ninja");
       if (!g_file_query_exists (ninja_file, NULL))
@@ -1719,7 +1732,7 @@ builder_module_build (BuilderModule  *self,
           return FALSE;
         }
     }
-  else if (autotools || cmake || qmake)
+  else if (buildsystem == BUILDER_BUILDSYSTEM_AUTOTOOLS || buildsystem == BUILDER_BUILDSYSTEM_CMAKE || buildsystem == BUILDER_BUILDSYSTEM_QMAKE)
     {
       const char *makefile_names[] =  {"Makefile", "makefile", "GNUmakefile", NULL};
 
@@ -1742,7 +1755,7 @@ builder_module_build (BuilderModule  *self,
       make_j = g_strdup_printf ("-j%d", builder_context_get_jobs (context));
       make_l = g_strdup_printf ("-l%d", 2 * builder_context_get_jobs (context));
     }
-  else if (meson || cmake_ninja)
+  else if (buildsystem == BUILDER_BUILDSYSTEM_MESON || buildsystem == BUILDER_BUILDSYSTEM_CMAKE_NINJA)
     {
       /* ninja defaults to a parallel make, disable it if requested */
       make_j = g_strdup ("-j1");
@@ -1759,21 +1772,7 @@ builder_module_build (BuilderModule  *self,
 
   builder_set_term_title (_("Installing %s"), self->name);
 
-  if (meson || cmake_ninja)
-    {
-      make_cmd = "ninja";
-      test_arg = "test";
-    }
-  else if (simple)
-    make_cmd = NULL;
-  else
-    {
-      make_cmd = "make";
-      test_arg = "check";
-    }
-
-  if (self->test_rule)
-    test_arg = self->test_rule;
+  make_cmd = buildsystem_get_make_cmd (buildsystem);
 
   if (make_cmd)
     {
@@ -1831,40 +1830,86 @@ builder_module_build (BuilderModule  *self,
         }
     }
 
-  /* Run unit tests */
+  return TRUE;
+}
 
-  if (self->run_tests && builder_context_get_run_tests (context))
+gboolean
+builder_module_run_tests (BuilderModule  *self,
+                          BuilderContext *context,
+                          GFile          *source_dir,
+                          GError        **error)
+{
+  GFile *app_dir = builder_context_get_app_dir (context);
+  g_auto(GStrv) test_args = NULL;
+  const char *make_cmd = NULL;
+  const char *test_arg = NULL;
+  BuilderBuildsystem buildsystem;
+  g_autoptr(GFile) source_subdir = NULL;
+  const char *source_subdir_relative = NULL;
+  g_autoptr(GFile) build_dir = NULL;
+  g_autofree char *build_dir_relative = NULL;
+  g_auto(GStrv) env = NULL;
+  int i;
+
+  if (!self->run_tests)
+    return TRUE;
+
+  buildsystem = builder_module_get_buildsystem (self, error);
+  if (buildsystem == BUILDER_BUILDSYSTEM_INVALID)
+    return FALSE;
+
+  source_subdir = get_source_subdir (self, source_dir, &source_subdir_relative);
+
+  build_dir = get_build_dir (self, buildsystem, source_subdir, source_subdir_relative,
+                             &build_dir_relative);
+
+  env = builder_options_get_env (self->build_options, self->manifest, context);
+
+  make_cmd = buildsystem_get_make_cmd (buildsystem);
+  test_arg = buildsystem_get_test_arg (buildsystem);
+
+  if (self->test_rule)
+    test_arg = self->test_rule;
+
+  builder_set_term_title (_("Testing %s"), self->name);
+  g_print ("Running tests\n");
+
+  test_args = builder_options_get_test_args (self->build_options, self->manifest, context, error);
+  if (test_args == NULL)
+    return FALSE;
+
+  if (make_cmd && test_arg && *test_arg != 0)
     {
-      g_auto(GStrv) test_args = NULL;
-
-      builder_set_term_title (_("Testing %s"), self->name);
-      g_print ("Running tests\n");
-
-      test_args = builder_options_get_test_args (self->build_options, self->manifest, context, error);
-      if (test_args == NULL)
-        return FALSE;
-
-      if (make_cmd && test_arg && *test_arg != 0)
+      if (!build (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, test_args, env, error,
+                  make_cmd, test_arg, NULL))
         {
-          if (!build (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, test_args, env, error,
-                      make_cmd, test_arg, NULL))
-            {
-              g_prefix_error (error, "Running %s %s failed: ", make_cmd, test_arg);
-              return FALSE;
-            }
-        }
-
-      for (i = 0; self->test_commands != NULL && self->test_commands[i] != NULL; i++)
-        {
-          g_print ("Running: %s\n", self->test_commands[i]);
-          if (!build (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, test_args, env, error,
-                      "/bin/sh", "-c", self->test_commands[i], NULL))
-            {
-              g_prefix_error (error, "Running test command '%s' failed: ", self->test_commands[i]);
-              return FALSE;
-            }
+          g_prefix_error (error, "Running %s %s failed: ", make_cmd, test_arg);
+          return FALSE;
         }
     }
+
+  for (i = 0; self->test_commands != NULL && self->test_commands[i] != NULL; i++)
+    {
+      g_print ("Running: %s\n", self->test_commands[i]);
+      if (!build (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, test_args, env, error,
+                  "/bin/sh", "-c", self->test_commands[i], NULL))
+        {
+          g_prefix_error (error, "Running test command '%s' failed: ", self->test_commands[i]);
+          return FALSE;
+        }
+    }
+
+  return TRUE;
+}
+
+gboolean
+builder_module_post_process (BuilderModule  *self,
+                             BuilderCache   *cache,
+                             BuilderContext *context,
+                             GError        **error)
+{
+  BuilderPostProcessFlags post_process_flags = 0;
+  GFile *app_dir = builder_context_get_app_dir (context);
 
   if (!self->no_python_timestamp_fix)
     post_process_flags |= BUILDER_POST_PROCESS_FLAGS_PYTHON_TIMESTAMPS;
@@ -1886,7 +1931,6 @@ builder_module_build (BuilderModule  *self,
       g_prefix_error (error, "module %s: ", self->name);
       return FALSE;
     }
-
 
   return TRUE;
 }

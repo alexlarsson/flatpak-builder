@@ -2111,6 +2111,32 @@ should_delete_build_dir (BuilderContext  *context,
 }
 
 static gboolean
+do_build_module_steps (BuilderManifest *self,
+                       BuilderModule   *module,
+                       BuilderCache    *cache,
+                       BuilderContext  *context,
+                       GFile           *build_dir,
+                       gboolean         run_shell,
+                       GError         **error)
+{
+  if (!builder_module_extract_sources (module, build_dir, context, error))
+    return FALSE;
+
+  if (!builder_module_build (module, context, build_dir, run_shell, error))
+    return FALSE;
+
+  if (builder_context_get_run_tests (context) &&
+      !builder_module_run_tests (module, context, build_dir, error))
+    return FALSE;
+
+  if (!builder_module_post_process (module, cache, context, error))
+    return FALSE;
+
+  return TRUE;
+}
+
+
+static gboolean
 do_build_module (BuilderManifest *self,
                  BuilderModule   *module,
                  BuilderCache    *cache,
@@ -2136,9 +2162,8 @@ do_build_module (BuilderManifest *self,
 
       builder_set_term_title (_("Building %s"), name);
 
-      if (!builder_module_extract_sources (module, build_dir, context, error))
-        error = NULL; /* Don't report errors from cleanups */
-      else if (!builder_module_build (module, cache, context, build_dir, run_shell, error))
+      if (!do_build_module_steps (self, module, cache, context, build_dir,
+                                  run_shell, error))
         error = NULL; /* Don't report errors from cleanups */
       else
         res = TRUE; /* Build succeeded */
