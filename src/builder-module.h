@@ -79,6 +79,7 @@ gboolean builder_module_ensure_writable (BuilderModule  *self,
 gboolean builder_module_build (BuilderModule  *self,
                                BuilderCache   *cache,
                                BuilderContext *context,
+                               GFile          *build_dir,
                                gboolean        run_shell,
                                GError        **error);
 gboolean builder_module_update (BuilderModule  *self,

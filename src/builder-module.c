@@ -1382,13 +1382,13 @@ find_file_with_extension (GFile *dir,
   return NULL;
 }
 
-static gboolean
-builder_module_build_helper (BuilderModule  *self,
-                             BuilderCache   *cache,
-                             BuilderContext *context,
-                             GFile          *source_dir,
-                             gboolean        run_shell,
-                             GError        **error)
+gboolean
+builder_module_build (BuilderModule  *self,
+                      BuilderCache   *cache,
+                      BuilderContext *context,
+                      GFile          *source_dir,
+                      gboolean        run_shell,
+                      GError        **error)
 {
   GFile *app_dir = builder_context_get_app_dir (context);
   g_autofree char *make_j = NULL;
@@ -1414,15 +1414,6 @@ builder_module_build_helper (BuilderModule  *self,
   BuilderPostProcessFlags post_process_flags = 0;
 
   source_dir_path = g_file_get_path (source_dir);
-
-  g_print ("========================================================================\n");
-  g_print ("Building module %s in %s\n", self->name, source_dir_path);
-  g_print ("========================================================================\n");
-
-  builder_set_term_title (_("Building %s"), self->name);
-
-  if (!builder_module_extract_sources (self, source_dir, context, error))
-    return FALSE;
 
   if (self->subdir != NULL && self->subdir[0] != 0)
     {
@@ -1855,7 +1846,7 @@ builder_module_build_helper (BuilderModule  *self,
     {
       post_process_flags |= BUILDER_POST_PROCESS_FLAGS_DEBUGINFO;
       if (!builder_options_get_no_debuginfo_compression (self->build_options, self->manifest, context))
-	post_process_flags |= BUILDER_POST_PROCESS_FLAGS_DEBUGINFO_COMPRESSION;
+        post_process_flags |= BUILDER_POST_PROCESS_FLAGS_DEBUGINFO_COMPRESSION;
     }
 
   if (!builder_post_process (post_process_flags, app_dir,
@@ -1867,75 +1858,6 @@ builder_module_build_helper (BuilderModule  *self,
 
 
   return TRUE;
-}
-
-gboolean
-builder_module_build (BuilderModule  *self,
-                      BuilderCache   *cache,
-                      BuilderContext *context,
-                      gboolean        run_shell,
-                      GError        **error)
-{
-  g_autoptr(GFile) source_dir = NULL;
-  g_autoptr(GFile) build_parent_dir = NULL;
-  g_autoptr(GFile) build_link = NULL;
-  g_autoptr(GError) my_error = NULL;
-  g_autofree char *buildname = NULL;
-  gboolean res;
-
-  source_dir = builder_context_allocate_build_subdir (context, self->name, error);
-  if (source_dir == NULL)
-    {
-      g_prefix_error (error, "module %s: ", self->name);
-      return FALSE;
-    }
-
-  build_parent_dir = g_file_get_parent (source_dir);
-  buildname = g_file_get_basename (source_dir);
-
-  /* Make an unversioned symlink */
-  build_link = g_file_get_child (build_parent_dir, self->name);
-  if (!g_file_delete (build_link, NULL, &my_error) &&
-      !g_error_matches (my_error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
-    {
-      g_propagate_error (error, g_steal_pointer (&my_error));
-      g_prefix_error (error, "module %s: ", self->name);
-      return FALSE;
-    }
-  g_clear_error (&my_error);
-
-  if (!g_file_make_symbolic_link (build_link,
-                                  buildname,
-                                  NULL, error))
-    {
-      g_prefix_error (error, "module %s: ", self->name);
-      return FALSE;
-    }
-
-  res = builder_module_build_helper (self, cache, context, source_dir, run_shell, error);
-
-  /* Clean up build dir */
-
-  if (!run_shell &&
-      (!builder_context_get_keep_build_dirs (context) &&
-       (res || builder_context_get_delete_build_dirs (context))))
-    {
-      builder_set_term_title (_("Cleanup %s"), self->name);
-
-      if (!g_file_delete (build_link, NULL, error))
-        {
-          g_prefix_error (error, "module %s: ", self->name);
-          return FALSE;
-        }
-
-      if (!flatpak_rm_rf (source_dir, NULL, error))
-        {
-          g_prefix_error (error, "module %s: ", self->name);
-          return FALSE;
-        }
-    }
-
-  return res;
 }
 
 gboolean

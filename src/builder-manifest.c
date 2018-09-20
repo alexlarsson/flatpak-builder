@@ -2021,39 +2021,144 @@ builder_manifest_download (BuilderManifest *self,
   return TRUE;
 }
 
-gboolean
-builder_manifest_build_shell (BuilderManifest *self,
-                              BuilderContext  *context,
-                              const char      *modulename,
-                              GError         **error)
-{
-  g_autoptr(GList) enabled_modules = NULL;
-  GList *l;
-  BuilderModule *found = NULL;
 
-  if (!builder_context_enable_rofiles (context, error))
+static GFile *
+allocate_build_dir (BuilderContext  *context,
+                    const char *name,
+                    GError        **error)
+{
+  g_autoptr(GFile) build_dir = NULL;
+  g_autoptr(GFile) build_parent_dir = NULL;
+  g_autoptr(GFile) build_link = NULL;
+  g_autoptr(GError) my_error = NULL;
+  g_autofree char *buildname = NULL;
+
+  build_dir = builder_context_allocate_build_subdir (context, name, error);
+  if (build_dir == NULL)
+    {
+      g_prefix_error (error, "module %s: ", name);
+      return NULL;
+    }
+
+  build_parent_dir = g_file_get_parent (build_dir);
+  buildname = g_file_get_basename (build_dir);
+
+  /* Make an unversioned symlink */
+  build_link = g_file_get_child (build_parent_dir, name);
+  if (!g_file_delete (build_link, NULL, &my_error) &&
+      !g_error_matches (my_error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
+    {
+      g_propagate_error (error, g_steal_pointer (&my_error));
+      g_prefix_error (error, "module %s: ", name);
+      return NULL;
+    }
+  g_clear_error (&my_error);
+
+  if (!g_file_make_symbolic_link (build_link, buildname, NULL, error))
+    {
+      g_prefix_error (error, "module %s: ", name);
+      return NULL;
+    }
+
+  return g_steal_pointer (&build_dir);
+}
+
+
+static gboolean
+delete_build_dir (BuilderContext  *context,
+                  GFile *build_dir,
+                  const char *name,
+                  GError **error)
+{
+  g_autoptr(GFile) build_parent_dir = NULL;
+  g_autoptr(GFile) build_link = NULL;
+  gboolean res = TRUE;
+
+  build_parent_dir = g_file_get_parent (build_dir);
+  build_link = g_file_get_child (build_parent_dir, name);
+
+  builder_set_term_title (_("Cleanup %s"), name);
+
+  if (!g_file_delete (build_link, NULL, error))
+    {
+      g_prefix_error (error, "module %s: ", name);
+      error = NULL; /* Don't report more errors */
+      res = FALSE;
+    }
+
+  if (!flatpak_rm_rf (build_dir, NULL, error))
+    {
+      g_prefix_error (error, "module %s: ", name);
+      error = NULL; /* Don't report more errors */
+      res = FALSE;
+    }
+
+  return res;
+}
+
+static gboolean
+should_delete_build_dir (BuilderContext  *context,
+                         gboolean build_succeeded)
+{
+  if (builder_context_get_keep_build_dirs (context))
     return FALSE;
 
-  enabled_modules = builder_manifest_get_enabled_modules (self, context);
-  for (l = enabled_modules; l != NULL; l = l->next)
-    {
-      BuilderModule *m = l->data;
-      const char *name = builder_module_get_name (m);
+  if (builder_context_get_delete_build_dirs (context))
+    return TRUE;
 
-      if (strcmp (name, modulename) == 0)
+  /* Unless otherwise specified, keep failed builds */
+  return build_succeeded;
+}
+
+static gboolean
+do_build_module (BuilderManifest *self,
+                 BuilderModule   *module,
+                 BuilderCache    *cache,
+                 BuilderContext  *context,
+                 gboolean         run_shell,
+                 GError         **error)
+{
+  g_autoptr(GFile) build_dir = NULL;
+  const char *name = builder_module_get_name (module);
+  gboolean res = FALSE;
+
+  build_dir = allocate_build_dir (context, name, error);
+  if (build_dir == NULL)
+    return FALSE;
+
+  if (!builder_context_enable_rofiles (context, error))
+    error = NULL; /* Don't report errors from cleanups */
+  else
+    {
+      g_print ("========================================================================\n");
+      g_print ("Building module %s in %s\n", name, flatpak_file_get_path_cached (build_dir));
+      g_print ("========================================================================\n");
+
+      builder_set_term_title (_("Building %s"), name);
+
+      if (!builder_module_extract_sources (module, build_dir, context, error))
+        error = NULL; /* Don't report errors from cleanups */
+      else if (!builder_module_build (module, cache, context, build_dir, run_shell, error))
+        error = NULL; /* Don't report errors from cleanups */
+      else
+        res = TRUE; /* Build succeeded */
+
+      if (!builder_context_disable_rofiles (context, error))
         {
-          found = m;
-          break;
+          error = NULL;
+          res = FALSE;
         }
     }
 
-  if (found == NULL)
-    return flatpak_fail (error, "Can't find module %s", modulename);
+  /* Keep build dir if requested or if the build failed and we didn't override deletions */
+  if (should_delete_build_dir (context, res) &&
+      !delete_build_dir (context, build_dir, name, error))
+    {
+      error = NULL; /* Don't report errors from cleanups */
+      res = FALSE;
+    }
 
-  if (!builder_module_build (found, NULL, context, TRUE, error))
-    return FALSE;
-
-  return TRUE;
+  return res;
 }
 
 gboolean
@@ -2092,15 +2197,10 @@ builder_manifest_build (BuilderManifest *self,
 
       if (!builder_cache_lookup (cache, stage))
         {
-          g_autofree char *body =
-            g_strdup_printf ("Built %s\n", name);
+          g_autofree char *body = g_strdup_printf ("Built %s\n", builder_module_get_name (m));
           if (!builder_module_ensure_writable (m, cache, context, error))
             return FALSE;
-          if (!builder_context_enable_rofiles (context, error))
-            return FALSE;
-          if (!builder_module_build (m, cache, context, FALSE, error))
-            return FALSE;
-          if (!builder_context_disable_rofiles (context, error))
+          if (!do_build_module (self, m, cache, context, FALSE, error))
             return FALSE;
           if (!builder_cache_commit (cache, body, error))
             return FALSE;
@@ -2116,8 +2216,27 @@ builder_manifest_build (BuilderManifest *self,
 
       builder_module_set_changes (m, changes);
 
-      builder_module_update (m, context, error);
+      if (!builder_module_update (m, context, error))
+        return FALSE;
     }
+
+  return TRUE;
+}
+
+gboolean
+builder_manifest_build_shell (BuilderManifest *self,
+                              BuilderContext  *context,
+                              const char      *modulename,
+                              GError         **error)
+{
+  BuilderModule *found = NULL;
+
+  found = builder_manifest_get_module (self, modulename);
+  if (found == NULL)
+    return flatpak_fail (error, "Can't find module %s", modulename);
+
+  if (!do_build_module (self, found, NULL, context, TRUE, error))
+    return FALSE;
 
   return TRUE;
 }
