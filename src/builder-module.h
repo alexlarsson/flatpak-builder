@@ -36,6 +36,16 @@ G_BEGIN_DECLS
 /* Bump this if format changes in incompatible ways to force rebuild */
 #define BUILDER_MODULE_CHECKSUM_VERSION "1"
 
+typedef enum {
+              BUILDER_BUILDSYSTEM_INVALID,
+              BUILDER_BUILDSYSTEM_AUTOTOOLS,
+              BUILDER_BUILDSYSTEM_CMAKE,
+              BUILDER_BUILDSYSTEM_CMAKE_NINJA,
+              BUILDER_BUILDSYSTEM_MESON,
+              BUILDER_BUILDSYSTEM_SIMPLE,
+              BUILDER_BUILDSYSTEM_QMAKE
+} BuilderBuildsystem;
+
 GType builder_module_get_type (void);
 
 const char * builder_module_get_name (BuilderModule *self);
@@ -43,6 +53,8 @@ gboolean     builder_module_is_enabled (BuilderModule *self,
                                         BuilderContext *context);
 gboolean     builder_module_get_disabled (BuilderModule *self);
 gboolean     builder_module_should_build (BuilderModule *self);
+BuilderBuildsystem builder_module_get_buildsystem (BuilderModule *self,
+                                                   GError **error);
 GList *      builder_module_get_sources (BuilderModule *self);
 GList *      builder_module_get_modules (BuilderModule *self);
 void         builder_module_set_json_path (BuilderModule *self,

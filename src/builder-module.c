@@ -942,6 +942,37 @@ builder_module_get_name (BuilderModule *self)
   return self->name;
 }
 
+BuilderBuildsystem
+builder_module_get_buildsystem (BuilderModule *self,
+                                GError **error)
+{
+  if (!self->buildsystem)
+    {
+      if (self->cmake)
+        return BUILDER_BUILDSYSTEM_CMAKE;
+      else
+        return BUILDER_BUILDSYSTEM_AUTOTOOLS;
+    }
+  else if (!strcmp (self->buildsystem, "cmake"))
+    return BUILDER_BUILDSYSTEM_CMAKE;
+  else if (!strcmp (self->buildsystem, "meson"))
+    return BUILDER_BUILDSYSTEM_MESON;
+  else if (!strcmp (self->buildsystem, "autotools"))
+    return BUILDER_BUILDSYSTEM_AUTOTOOLS;
+  else if (!strcmp (self->buildsystem, "cmake-ninja"))
+    return BUILDER_BUILDSYSTEM_CMAKE_NINJA;
+  else if (!strcmp (self->buildsystem, "simple"))
+    return BUILDER_BUILDSYSTEM_SIMPLE;
+  else if (!strcmp (self->buildsystem, "qmake"))
+    return BUILDER_BUILDSYSTEM_QMAKE;
+  else
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "module %s: Invalid buildsystem: \"%s\"",
+                   self->name, self->buildsystem);
+      return BUILDER_BUILDSYSTEM_INVALID;
+    }
+}
+
 gboolean
 builder_module_is_enabled (BuilderModule *self,
                            BuilderContext *context)
