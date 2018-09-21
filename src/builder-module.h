@@ -88,10 +88,17 @@ gboolean builder_module_ensure_writable (BuilderModule  *self,
                                          BuilderCache   *cache,
                                          BuilderContext *context,
                                          GError        **error);
+gboolean builder_module_configure (BuilderModule  *self,
+                                   BuilderContext *context,
+                                   GFile          *source_dir,
+                                   GError        **error);
+gboolean builder_module_run_shell (BuilderModule  *self,
+                                   BuilderContext *context,
+                                   GFile          *build_dir,
+                                   GError        **error);
 gboolean builder_module_build (BuilderModule  *self,
                                BuilderContext *context,
                                GFile          *build_dir,
-                               gboolean        run_shell,
                                GError        **error);
 gboolean builder_module_run_tests (BuilderModule  *self,
                                    BuilderContext *context,

@@ -1481,45 +1481,48 @@ get_build_dir (BuilderModule  *self,
     }
 }
 
-gboolean
-builder_module_build (BuilderModule  *self,
-                      BuilderContext *context,
-                      GFile          *source_dir,
-                      gboolean        run_shell,
-                      GError        **error)
+static char **
+get_build_env (BuilderModule  *self,
+               BuilderContext *context)
 {
-  GFile *app_dir = builder_context_get_app_dir (context);
-  g_autofree char *make_j = NULL;
-  g_autofree char *make_l = NULL;
-  g_autofree char *n_jobs = NULL;
-  const char *make_cmd = NULL;
-  BuilderBuildsystem buildsystem;
-  g_autoptr(GFile) configure_file = NULL;
-  g_autoptr(GFile) build_dir = NULL;
-  g_autofree char *build_dir_relative = NULL;
-  gboolean has_configure = FALSE;
-  int i;
   g_auto(GStrv) env = NULL;
-  g_auto(GStrv) build_args = NULL;
-  g_auto(GStrv) config_opts = NULL;
-  g_autoptr(GFile) source_subdir = NULL;
-  const char *source_subdir_relative = NULL;
-
-  source_subdir = get_source_subdir (self, source_dir, &source_subdir_relative);
-
-  build_args = builder_options_get_build_args (self->build_options, self->manifest, context, error);
-  if (build_args == NULL)
-    return FALSE;
+  g_autofree char *n_jobs = NULL;
 
   env = builder_options_get_env (self->build_options, self->manifest, context);
-  config_opts = builder_options_get_config_opts (self->build_options, self->manifest, context, self->config_opts);
 
   n_jobs = g_strdup_printf ("%d", self->no_parallel_make ? 1 : builder_context_get_jobs (context));
   env = g_environ_setenv (env, "FLATPAK_BUILDER_N_JOBS", n_jobs, FALSE);
 
+  return g_steal_pointer (&env);
+}
+
+gboolean
+builder_module_configure (BuilderModule  *self,
+                          BuilderContext *context,
+                          GFile          *source_dir,
+                          GError        **error)
+{
+  GFile *app_dir = builder_context_get_app_dir (context);
+  g_autofree char *make_j = NULL;
+  g_autofree char *make_l = NULL;
+  BuilderBuildsystem buildsystem;
+  g_autoptr(GFile) configure_file = NULL;
+  gboolean has_configure = FALSE;
+  int i;
+  g_auto(GStrv) env = NULL;
+  g_auto(GStrv) build_args = NULL;
+  g_autoptr(GFile) source_subdir = NULL;
+  const char *source_subdir_relative = NULL;
+  g_autoptr(GFile) build_dir = NULL;
+  g_autofree char *build_dir_relative = NULL;
+
   buildsystem = builder_module_get_buildsystem (self, error);
   if (buildsystem == BUILDER_BUILDSYSTEM_INVALID)
     return FALSE;
+
+  source_subdir = get_source_subdir (self, source_dir, &source_subdir_relative);
+  build_dir = get_build_dir (self, buildsystem, source_subdir, source_subdir_relative,
+                             &build_dir_relative);
 
   if (buildsystem == BUILDER_BUILDSYSTEM_SIMPLE)
     {
@@ -1577,6 +1580,11 @@ builder_module_build (BuilderModule  *self,
         }
     }
 
+  env = get_build_env (self, context);
+  build_args = builder_options_get_build_args (self->build_options, self->manifest, context, error);
+  if (build_args == NULL)
+    return FALSE;
+
   if (configure_file)
     has_configure = g_file_query_exists (configure_file, NULL);
 
@@ -1628,9 +1636,10 @@ builder_module_build (BuilderModule  *self,
       g_autoptr(GPtrArray) configure_args_arr = g_ptr_array_new ();
       const char *prefix = NULL;
       const char *libdir = NULL;
+      g_auto(GStrv) config_opts = NULL;
 
-      build_dir = get_build_dir (self, buildsystem, source_subdir, source_subdir_relative,
-                                 &build_dir_relative);
+      config_opts = builder_options_get_config_opts (self->build_options, self->manifest, context, self->config_opts);
+
       if (should_use_builddir (self, buildsystem))
         {
           if (!g_file_make_directory (build_dir, NULL, error))
@@ -1717,11 +1726,8 @@ builder_module_build (BuilderModule  *self,
                   configure_cmd, strv_arg, configure_args, strv_arg, config_opts, NULL))
         return FALSE;
     }
-  else
-    {
-      build_dir_relative = g_strdup (source_subdir_relative);
-      build_dir = g_object_ref (source_subdir);
-    }
+
+  /* Ensure the configure successfully created the right thing */
 
   if (buildsystem == BUILDER_BUILDSYSTEM_MESON || buildsystem == BUILDER_BUILDSYSTEM_CMAKE_NINJA)
     {
@@ -1750,6 +1756,77 @@ builder_module_build (BuilderModule  *self,
         }
     }
 
+  return TRUE;
+}
+
+gboolean
+builder_module_run_shell (BuilderModule  *self,
+                          BuilderContext *context,
+                          GFile          *source_dir,
+                          GError        **error)
+{
+  GFile *app_dir = builder_context_get_app_dir (context);
+  g_auto(GStrv) env = NULL;
+  g_auto(GStrv) build_args = NULL;
+  BuilderBuildsystem buildsystem;
+  g_autoptr(GFile) source_subdir = NULL;
+  const char *source_subdir_relative = NULL;
+  g_autoptr(GFile) build_dir = NULL;
+  g_autofree char *build_dir_relative = NULL;
+
+  buildsystem = builder_module_get_buildsystem (self, error);
+  if (buildsystem == BUILDER_BUILDSYSTEM_INVALID)
+    return FALSE;
+
+  source_subdir = get_source_subdir (self, source_dir, &source_subdir_relative);
+  build_dir = get_build_dir (self, buildsystem, source_subdir, source_subdir_relative,
+                             &build_dir_relative);
+
+  env = get_build_env (self, context);
+  build_args = builder_options_get_build_args (self->build_options, self->manifest, context, error);
+  if (build_args == NULL)
+    return FALSE;
+
+  if (!shell (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error))
+    return FALSE;
+  return TRUE;
+}
+
+gboolean
+builder_module_build (BuilderModule  *self,
+                      BuilderContext *context,
+                      GFile          *source_dir,
+                      GError        **error)
+{
+  GFile *app_dir = builder_context_get_app_dir (context);
+  g_auto(GStrv) env = NULL;
+  g_auto(GStrv) build_args = NULL;
+  g_autofree char *n_jobs = NULL;
+  g_autofree char *make_j = NULL;
+  g_autofree char *make_l = NULL;
+  const char *make_cmd = NULL;
+  BuilderBuildsystem buildsystem;
+  g_autoptr(GFile) source_subdir = NULL;
+  const char *source_subdir_relative = NULL;
+  g_autoptr(GFile) build_dir = NULL;
+  g_autofree char *build_dir_relative = NULL;
+  int i;
+
+  builder_set_term_title (_("Building %s"), self->name);
+
+  buildsystem = builder_module_get_buildsystem (self, error);
+  if (buildsystem == BUILDER_BUILDSYSTEM_INVALID)
+    return FALSE;
+
+  source_subdir = get_source_subdir (self, source_dir, &source_subdir_relative);
+  build_dir = get_build_dir (self, buildsystem, source_subdir, source_subdir_relative,
+                             &build_dir_relative);
+
+  env = get_build_env (self, context);
+  build_args = builder_options_get_build_args (self->build_options, self->manifest, context, error);
+  if (build_args == NULL)
+    return FALSE;
+
   if (!self->no_parallel_make)
     {
       make_j = g_strdup_printf ("-j%d", builder_context_get_jobs (context));
@@ -1760,17 +1837,6 @@ builder_module_build (BuilderModule  *self,
       /* ninja defaults to a parallel make, disable it if requested */
       make_j = g_strdup ("-j1");
     }
-
-  if (run_shell)
-    {
-      if (!shell (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error))
-        return FALSE;
-      return TRUE;
-    }
-
-  /* Build and install */
-
-  builder_set_term_title (_("Installing %s"), self->name);
 
   make_cmd = buildsystem_get_make_cmd (buildsystem);
 
@@ -1790,6 +1856,8 @@ builder_module_build (BuilderModule  *self,
                   "/bin/sh", "-c", self->build_commands[i], NULL))
         return FALSE;
     }
+
+  builder_set_term_title (_("Installing %s"), self->name);
 
   if (!self->no_make_install && make_cmd)
     {

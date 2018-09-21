@@ -2122,7 +2122,17 @@ do_build_module_steps (BuilderManifest *self,
   if (!builder_module_extract_sources (module, build_dir, context, error))
     return FALSE;
 
-  if (!builder_module_build (module, context, build_dir, run_shell, error))
+  if (!builder_module_configure (module, context, build_dir, error))
+    return FALSE;
+
+  if (run_shell)
+    {
+      if (!builder_module_run_shell (module, context, build_dir, error))
+        return FALSE;
+      return TRUE;
+    }
+
+  if (!builder_module_build (module, context, build_dir, error))
     return FALSE;
 
   if (builder_context_get_run_tests (context) &&
