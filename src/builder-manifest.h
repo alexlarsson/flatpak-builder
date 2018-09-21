@@ -26,7 +26,6 @@
 #include "builder-flatpak-utils.h"
 #include "builder-options.h"
 #include "builder-module.h"
-#include "builder-cache.h"
 #include "builder-extension.h"
 
 G_BEGIN_DECLS
@@ -46,6 +45,8 @@ GType builder_manifest_get_type (void);
 
 BuilderManifest * builder_manifest_load (GFile *file,
                                          GError **error);
+char *            builder_manifest_serialize (BuilderManifest *self);
+
 char *            builder_manifest_get_content_checksum (BuilderManifest *self);
 
 const char *    builder_manifest_get_id (BuilderManifest *self);
@@ -75,6 +76,8 @@ gboolean        builder_manifest_get_build_runtime (BuilderManifest *self);
 gboolean        builder_manifest_get_build_extension (BuilderManifest *self);
 const char **   builder_manifest_get_cleanup (BuilderManifest *self);
 const char **   builder_manifest_get_cleanup_platform (BuilderManifest *self);
+const char *    builder_manifest_get_base_version (BuilderManifest *self);
+const char *    builder_manifest_get_runtime_version (BuilderManifest *self);
 
 char **         builder_manifest_get_exclude_dirs (BuilderManifest *self);
 
@@ -121,6 +124,18 @@ gboolean        builder_manifest_show_deps (BuilderManifest *self,
 void            builder_manifest_checksum (BuilderManifest *self,
                                            GChecksum      *checksum,
                                            BuilderContext  *context);
+void            builder_manifest_checksum_for_cleanup (BuilderManifest *self,
+                                                       GChecksum      *checksum,
+                                                       BuilderContext  *context);
+void            builder_manifest_checksum_for_finish (BuilderManifest *self,
+                                                      GChecksum      *checksum,
+                                                      BuilderContext  *context);
+void            builder_manifest_checksum_for_bundle_sources (BuilderManifest *self,
+                                                              GChecksum      *checksum,
+                                                              BuilderContext  *context);
+void            builder_manifest_checksum_for_platform (BuilderManifest *self,
+                                                        GChecksum      *checksum,
+                                                        BuilderContext  *context);
 gboolean        builder_manifest_cleanup (BuilderManifest *self,
                                           BuilderCache    *cache,
                                           BuilderContext  *context,

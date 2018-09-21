@@ -141,6 +141,39 @@ flatpak_matches_path_pattern (const char *path,
   return flatpak_path_match_prefix (pattern, path) != NULL;
 }
 
+G_GNUC_NULL_TERMINATED
+char *
+flatpak (GError **error,
+         ...)
+{
+  gboolean res;
+  g_autofree char *output = NULL;
+  g_autoptr(GPtrArray) ar = g_ptr_array_new ();
+  va_list ap;
+
+  va_start (ap, error);
+  g_ptr_array_add (ar, "flatpak");
+  while (TRUE)
+    {
+      gchar *param = va_arg (ap, gchar *);
+      g_ptr_array_add (ar, param);
+      if (param == NULL)
+        break;
+    }
+  va_end (ap);
+
+  res = builder_maybe_host_spawnv (NULL, &output, 0, error,
+                                   (const gchar * const *)ar->pdata);
+
+  if (res)
+    {
+      g_strchomp (output);
+      return g_steal_pointer (&output);
+    }
+
+  return NULL;
+}
+
 gboolean
 strip (GError **error,
        ...)

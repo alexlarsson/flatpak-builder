@@ -37,12 +37,16 @@ typedef struct BuilderUtils BuilderUtils;
 
 char *builder_uri_to_filename (const char *uri);
 
+G_GNUC_NULL_TERMINATED
+char * flatpak (GError **error,
+                ...);
+
 gboolean strip (GError **error,
                 ...);
 gboolean eu_strip (GError **error,
                    ...);
 gboolean eu_elfcompress (GError **error,
-			 ...);
+                         ...);
 
 gboolean is_elf_file (const char *path,
                       gboolean   *is_shared,

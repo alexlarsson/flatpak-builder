@@ -23,5 +23,7 @@
 
 typedef struct BuilderManifest BuilderManifest;
 typedef struct BuilderModule BuilderModule;
+typedef struct BuilderCache BuilderCache;
+typedef struct BuilderContext BuilderContext;
 
 #endif /* __BUILDER_TYPES_H__ */

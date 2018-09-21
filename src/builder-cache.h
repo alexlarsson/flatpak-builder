@@ -24,10 +24,9 @@
 #include <gio/gio.h>
 #include <libglnx/libglnx.h>
 
-G_BEGIN_DECLS
+#include "builder-types.h"
 
-typedef struct BuilderCache BuilderCache;
-typedef struct BuilderContext BuilderContext;
+G_BEGIN_DECLS
 
 #define BUILDER_TYPE_CACHE (builder_cache_get_type ())
 #define BUILDER_CACHE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), BUILDER_TYPE_CACHE, BuilderCache))

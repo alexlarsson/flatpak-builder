@@ -1288,63 +1288,6 @@ build (GFile           *app_dir,
   return TRUE;
 }
 
-gboolean
-builder_module_ensure_writable (BuilderModule  *self,
-                                BuilderCache   *cache,
-                                BuilderContext *context,
-                                GError        **error)
-{
-  g_autoptr(GPtrArray) changes = NULL;
-  g_autoptr(GHashTable) matches = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
-  GFile *app_dir = builder_context_get_app_dir (context);
-  GHashTableIter iter;
-  gpointer key, value;
-  int i;
-
-  if (cache == NULL)
-    return TRUE;
-
-  if (self->ensure_writable == NULL ||
-      self->ensure_writable[0] == NULL)
-    return TRUE;
-
-  changes = builder_cache_get_files (cache, error);
-  if (changes == NULL)
-    return FALSE;
-
-  for (i = 0; i < changes->len; i++)
-    {
-      const char *path = g_ptr_array_index (changes, i);
-      const char *unprefixed_path;
-      const char *prefix;
-
-      if (g_str_has_prefix (path, "files/"))
-        prefix = "files/";
-      else if (g_str_has_prefix (path, "usr/"))
-        prefix = "usr/";
-      else
-        continue;
-
-      unprefixed_path = path + strlen (prefix);
-
-      collect_cleanup_for_path ((const char **)self->ensure_writable, unprefixed_path, prefix, matches);
-    }
-
-  g_hash_table_iter_init (&iter, matches);
-  while (g_hash_table_iter_next (&iter, &key, &value))
-    {
-      const char *path = key;
-      g_autoptr(GFile) dest = g_file_resolve_relative_path (app_dir, path);
-
-      g_debug ("Breaking hardlink %s", path);
-      if (!flatpak_break_hardlink (dest, error))
-        return FALSE;
-    }
-
-
-  return TRUE;
-}
-
 static GFile *
 find_file_with_extension (GFile *dir,
                           const char *extension)
@@ -1919,39 +1862,6 @@ builder_module_run_tests (BuilderModule  *self,
           g_prefix_error (error, "Running test command '%s' failed: ", self->test_commands[i]);
           return FALSE;
         }
-    }
-
-  return TRUE;
-}
-
-gboolean
-builder_module_post_process (BuilderModule  *self,
-                             BuilderCache   *cache,
-                             BuilderContext *context,
-                             GError        **error)
-{
-  BuilderPostProcessFlags post_process_flags = 0;
-  GFile *app_dir = builder_context_get_app_dir (context);
-
-  if (!self->no_python_timestamp_fix)
-    post_process_flags |= BUILDER_POST_PROCESS_FLAGS_PYTHON_TIMESTAMPS;
-
-  if (builder_options_get_strip (self->build_options, self->manifest, context))
-    post_process_flags |= BUILDER_POST_PROCESS_FLAGS_STRIP;
-  else if (!builder_options_get_no_debuginfo (self->build_options, self->manifest, context) &&
-           /* No support for debuginfo for extensions atm */
-           !builder_manifest_get_build_extension (self->manifest))
-    {
-      post_process_flags |= BUILDER_POST_PROCESS_FLAGS_DEBUGINFO;
-      if (!builder_options_get_no_debuginfo_compression (self->build_options, self->manifest, context))
-        post_process_flags |= BUILDER_POST_PROCESS_FLAGS_DEBUGINFO_COMPRESSION;
-    }
-
-  if (!builder_post_process (post_process_flags, app_dir,
-                             cache, self->manifest, context, error))
-    {
-      g_prefix_error (error, "module %s: ", self->name);
-      return FALSE;
     }
 
   return TRUE;

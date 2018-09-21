@@ -5,6 +5,7 @@ bin_PROGRAMS += \
 flatpak_builder_SOURCES = \
 	src/builder-main.c \
 	src/builder-manifest.c \
+	src/builder-manifest-cache.c \
 	src/builder-manifest.h \
 	src/builder-manifest-private.h \
 	src/builder-options.c \
@@ -14,6 +15,7 @@ flatpak_builder_SOURCES = \
 	src/builder-types.h \
 	src/builder-module.c \
 	src/builder-module.h \
+	src/builder-module-cache.c \
 	src/builder-module-private.h \
 	src/builder-post-process.c \
 	src/builder-post-process.h \
