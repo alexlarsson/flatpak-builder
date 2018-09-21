@@ -28,7 +28,7 @@
 #include <sys/statfs.h>
 #include <glib/gi18n.h>
 
-#include "builder-manifest.h"
+#include "builder-manifest-private.h"
 #include "builder-utils.h"
 #include "builder-flatpak-utils.h"
 #include "builder-post-process.h"
@@ -43,8 +43,6 @@
 
 /* Shared with builder-module.c */
 static GFile *demarshal_base_dir = NULL;
-void _builder_manifest_set_demarshal_base_dir (GFile *dir);
-GFile *_builder_manifest_get_demarshal_base_dir (void);
 
 void
 _builder_manifest_set_demarshal_base_dir (GFile *dir)
@@ -57,65 +55,6 @@ _builder_manifest_get_demarshal_base_dir (void)
 {
   return g_object_ref (demarshal_base_dir);
 }
-
-struct BuilderManifest
-{
-  GObject         parent;
-
-  char           *manifest_contents;
-
-  char           *id;
-  char           *id_platform;
-  char           *branch;
-  char           *collection_id;
-  char           *extension_tag;
-  char           *type;
-  char           *runtime;
-  char           *runtime_commit;
-  char           *runtime_version;
-  char           *sdk;
-  char           *sdk_commit;
-  char           *var;
-  char           *base;
-  char           *base_commit;
-  char           *base_version;
-  char          **base_extensions;
-  char           *metadata;
-  char           *metadata_platform;
-  gboolean        separate_locales;
-  char          **cleanup;
-  char          **cleanup_commands;
-  char          **cleanup_platform;
-  char          **cleanup_platform_commands;
-  char          **prepare_platform_commands;
-  char          **finish_args;
-  char          **inherit_extensions;
-  char          **inherit_sdk_extensions;
-  char          **tags;
-  char           *rename_desktop_file;
-  char           *rename_appdata_file;
-  char           *appdata_license;
-  char           *rename_icon;
-  gboolean        copy_icon;
-  char           *desktop_file_name_prefix;
-  char           *desktop_file_name_suffix;
-  gboolean        build_runtime;
-  gboolean        build_extension;
-  gboolean        writable_sdk;
-  gboolean        appstream_compose;
-  char          **sdk_extensions;
-  char          **platform_extensions;
-  char           *command;
-  BuilderOptions *build_options;
-  GList          *modules;
-  GList          *add_extensions;
-  GList          *add_build_extensions;
-};
-
-typedef struct
-{
-  GObjectClass parent_class;
-} BuilderManifestClass;
 
 static void serializable_iface_init (JsonSerializableIface *serializable_iface);
 

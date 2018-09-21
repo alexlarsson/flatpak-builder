@@ -33,56 +33,10 @@
 
 #include "builder-flatpak-utils.h"
 #include "builder-utils.h"
-#include "builder-module.h"
+#include "builder-module-private.h"
 #include "builder-post-process.h"
-#include "builder-manifest.h"
+#include "builder-manifest-private.h"
 #include "builder-checksum.h"
-
-/* Shared with builder-manifest.c */
-void _builder_manifest_set_demarshal_base_dir (GFile *dir);
-GFile *_builder_manifest_get_demarshal_base_dir (void);
-
-struct BuilderModule
-{
-  GObject         parent;
-
-  BuilderManifest *manifest; /* non-owning ref */
-  char           *json_path;
-  char           *name;
-  char           *subdir;
-  char          **post_install;
-  char          **config_opts;
-  char          **make_args;
-  char          **make_install_args;
-  char           *install_rule;
-  char           *test_rule;
-  char           *buildsystem;
-  char          **ensure_writable;
-  char          **only_arches;
-  char          **skip_arches;
-  gboolean        disabled;
-  gboolean        rm_configure;
-  gboolean        no_autogen;
-  gboolean        no_parallel_make;
-  gboolean        no_make_install;
-  gboolean        no_python_timestamp_fix;
-  gboolean        cmake;
-  gboolean        builddir;
-  gboolean        run_tests;
-  BuilderOptions *build_options;
-  GPtrArray      *changes;
-  char          **cleanup;
-  char          **cleanup_platform;
-  GList          *sources;
-  GList          *modules;
-  char          **build_commands;
-  char          **test_commands;
-};
-
-typedef struct
-{
-  GObjectClass parent_class;
-} BuilderModuleClass;
 
 static void serializable_iface_init (JsonSerializableIface *serializable_iface);
 

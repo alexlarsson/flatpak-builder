@@ -6,6 +6,7 @@ flatpak_builder_SOURCES = \
 	src/builder-main.c \
 	src/builder-manifest.c \
 	src/builder-manifest.h \
+	src/builder-manifest-private.h \
 	src/builder-options.c \
 	src/builder-options.h \
 	src/builder-extension.c \
@@ -13,6 +14,7 @@ flatpak_builder_SOURCES = \
 	src/builder-types.h \
 	src/builder-module.c \
 	src/builder-module.h \
+	src/builder-module-private.h \
 	src/builder-post-process.c \
 	src/builder-post-process.h \
 	src/builder-source.c \
