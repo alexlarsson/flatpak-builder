@@ -24,7 +24,6 @@
 #include <json-glib/json-glib.h>
 
 #include "builder-context.h"
-#include "builder-cache.h"
 
 G_BEGIN_DECLS
 

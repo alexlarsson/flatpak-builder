@@ -2,23 +2,21 @@ bin_PROGRAMS += \
 	flatpak-builder \
 	$(NULL)
 
-flatpak_builder_SOURCES = \
-	src/builder-main.c \
+noinst_LTLIBRARIES += libbuilder.la
+
+libbuilder_la_CFLAGS = $(AM_CFLAGS) $(BASE_CFLAGS) $(YAML_CFLAGS)
+libbuilder_la_LIBADD = $(AM_LDADD) $(BASE_LIBS) $(LIBELF_LIBS) $(YAML_LIBS) libglnx.la
+
+libbuilder_la_SOURCES = \
 	src/builder-manifest.c \
-	src/builder-manifest-cache.c \
 	src/builder-manifest.h \
 	src/builder-manifest-private.h \
 	src/builder-options.c \
 	src/builder-options.h \
-	src/builder-extension.c \
-	src/builder-extension.h \
 	src/builder-types.h \
 	src/builder-module.c \
 	src/builder-module.h \
-	src/builder-module-cache.c \
 	src/builder-module-private.h \
-	src/builder-post-process.c \
-	src/builder-post-process.h \
 	src/builder-source.c \
 	src/builder-source.h \
 	src/builder-source-archive.c \
@@ -43,8 +41,6 @@ flatpak_builder_SOURCES = \
 	src/builder-source-dir.h \
 	src/builder-context.c \
 	src/builder-context.h \
-	src/builder-cache.c \
-	src/builder-cache.h \
 	src/builder-checksum.c \
 	src/builder-checksum.h \
 	src/builder-utils.c \
@@ -53,9 +49,22 @@ flatpak_builder_SOURCES = \
 	src/builder-flatpak-utils.h \
 	src/builder-git.c \
 	src/builder-git.h \
+	src/builder-extension.c \
+	src/builder-extension.h \
 	src/builder-sdk-config.c \
 	src/builder-sdk-config.h \
 	$(NULL)
 
-flatpak_builder_LDADD = $(AM_LDADD) $(BASE_LIBS) $(LIBELF_LIBS) $(YAML_LIBS) libglnx.la
-flatpak_builder_CFLAGS = $(AM_CFLAGS) $(BASE_CFLAGS) $(YAML_CFLAGS)
+
+flatpak_builder_SOURCES = \
+	src/builder-main.c \
+	src/builder-manifest-cache.c \
+	src/builder-module-cache.c \
+	src/builder-post-process.c \
+	src/builder-post-process.h \
+	src/builder-cache.c \
+	src/builder-cache.h \
+	$(NULL)
+
+flatpak_builder_LDADD = $(AM_LDADD) $(BASE_LIBS) $(LIBELF_LIBS) $(YAML_LIBS)  $(OSTREE_LIBS) libglnx.la libbuilder.la
+flatpak_builder_CFLAGS = $(AM_CFLAGS) $(BASE_CFLAGS) $(YAML_CFLAGS) $(OSTREE_CFLAGS)
