@@ -1,5 +1,6 @@
 bin_PROGRAMS += \
 	flatpak-builder \
+	flatpak-builder-tool \
 	$(NULL)
 
 noinst_LTLIBRARIES += libbuilder.la
@@ -55,6 +56,12 @@ libbuilder_la_SOURCES = \
 	src/builder-sdk-config.h \
 	$(NULL)
 
+flatpak_builder_tool_SOURCES = \
+	src/builder-tool.c \
+	$(NULL)
+
+flatpak_builder_tool_LDADD = $(AM_LDADD) $(BASE_LIBS) $(LIBELF_LIBS) $(YAML_LIBS) libglnx.la libbuilder.la
+flatpak_builder_tool_CFLAGS = $(AM_CFLAGS) $(BASE_CFLAGS) $(YAML_CFLAGS)
 
 flatpak_builder_SOURCES = \
 	src/builder-main.c \
