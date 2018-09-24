@@ -384,8 +384,6 @@ main (int    argc,
   g_autofree char *escaped_cache_branch = NULL;
   g_autoptr(GFileEnumerator) dir_enum = NULL;
   g_autoptr(GFileEnumerator) dir_enum2 = NULL;
-  g_autofree char *cwd = NULL;
-  g_autoptr(GFile) cwd_dir = NULL;
   GFileInfo *next = NULL;
   const char *platform_id = NULL;
   g_autofree char **orig_argv = NULL;
@@ -499,10 +497,8 @@ main (int    argc,
 
   if (app_dir_path)
     app_dir = g_file_new_for_path (app_dir_path);
-  cwd = g_get_current_dir ();
-  cwd_dir = g_file_new_for_path (cwd);
 
-  build_context = builder_context_new (cwd_dir, app_dir, opt_state_dir);
+  build_context = builder_context_new (app_dir, opt_state_dir);
 
   builder_context_set_use_rofiles (build_context, !opt_disable_rofiles);
   builder_context_set_run_tests (build_context, !opt_disable_tests);

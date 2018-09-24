@@ -973,12 +973,17 @@ builder_context_get_sdk_config (BuilderContext *self)
 }
 
 BuilderContext *
-builder_context_new (GFile *run_dir,
-                     GFile *app_dir,
+builder_context_new (GFile *app_dir,
                      const char *state_subdir)
 {
+  g_autofree char *cwd = NULL;
+  g_autoptr(GFile) cwd_dir = NULL;
+
+  cwd = g_get_current_dir ();
+  cwd_dir = g_file_new_for_path (cwd);
+
   return g_object_new (BUILDER_TYPE_CONTEXT,
-                       "run-dir", run_dir,
+                       "run-dir", cwd_dir,
                        "app-dir", app_dir,
                        "state-subdir", state_subdir,
                        NULL);
