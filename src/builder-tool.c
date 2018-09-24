@@ -93,10 +93,10 @@ json (GOptionContext *context,
   g_autoptr(GError) error = NULL;
   g_autofree char *json = NULL;
 
-  if (argc != 2)
+  if (argc < 2)
     return usage (context, "Must specify a manifest file");
 
-  manifest_file = g_file_new_for_path (argv[2]);
+  manifest_file = g_file_new_for_path (argv[1]);
 
   manifest = builder_manifest_load (manifest_file, &error);
   if (manifest == NULL)
@@ -162,7 +162,7 @@ main (int    argc,
   command_name = argv[first_non_arg];
   if (command_name != NULL)
     {
-     for (i = first_non_arg; i < argc-1; i++)
+     for (i = first_non_arg; i < argc - 1; i++)
        argv[i] = argv[i+1];
      argc--;
 
@@ -182,7 +182,6 @@ main (int    argc,
   if (command_name != NULL && command == NULL)
        return usage (context, "Unknown command %s", command_name);
 
-  
   if (command && command->extra_entries)
     g_option_context_add_main_entries (context, command->extra_entries, NULL);
 
