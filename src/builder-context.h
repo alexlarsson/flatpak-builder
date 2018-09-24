@@ -50,6 +50,10 @@ GFile *         builder_context_get_build_dir (BuilderContext *self);
 GFile *         builder_context_allocate_build_subdir (BuilderContext *self,
                                                        const char *name,
                                                        GError **error);
+gboolean        builder_context_delete_build_dir (BuilderContext  *self,
+                                                  GFile *build_dir,
+                                                  const char *name,
+                                                  GError **error);
 GFile *         builder_context_get_ccache_dir (BuilderContext *self);
 GFile *         builder_context_get_download_dir (BuilderContext *self);
 GPtrArray *     builder_context_get_sources_dirs (BuilderContext *self);

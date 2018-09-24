@@ -498,7 +498,29 @@ builder_context_allocate_build_subdir (BuilderContext *self,
       subdir = g_file_get_child (self->build_dir, buildname);
 
       if (g_file_make_directory (subdir, NULL, &my_error))
-        return g_steal_pointer (&subdir);
+        {
+          g_autoptr(GFile) build_link = NULL;
+          g_autoptr(GError) my_error = NULL;
+
+          /* Make an unversioned symlink */
+          build_link = g_file_get_child (self->build_dir, name);
+          if (!g_file_delete (build_link, NULL, &my_error) &&
+              !g_error_matches (my_error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
+            {
+              g_propagate_error (error, g_steal_pointer (&my_error));
+              g_prefix_error (error, "module %s: ", name);
+              return NULL;
+            }
+          g_clear_error (&my_error);
+
+          if (!g_file_make_symbolic_link (build_link, buildname, NULL, error))
+            {
+              g_prefix_error (error, "module %s: ", name);
+              return NULL;
+            }
+
+          return g_steal_pointer (&subdir);
+        }
       else
         {
           if (!g_error_matches (my_error, G_IO_ERROR, G_IO_ERROR_EXISTS))
@@ -514,6 +536,39 @@ builder_context_allocate_build_subdir (BuilderContext *self,
   flatpak_fail (error, "Unable to allocate build dir for %s\n", name);
   return NULL;
 }
+
+gboolean
+builder_context_delete_build_dir (BuilderContext  *self,
+                                  GFile *build_dir,
+                                  const char *name,
+                                  GError **error)
+{
+  g_autoptr(GFile) build_parent_dir = NULL;
+  g_autoptr(GFile) build_link = NULL;
+  gboolean res = TRUE;
+
+  build_parent_dir = g_file_get_parent (build_dir);
+  build_link = g_file_get_child (build_parent_dir, name);
+
+  builder_set_term_title (_("Cleanup %s"), name);
+
+  if (!g_file_delete (build_link, NULL, error))
+    {
+      g_prefix_error (error, "module %s: ", name);
+      error = NULL; /* Don't report more errors */
+      res = FALSE;
+    }
+
+  if (!flatpak_rm_rf (build_dir, NULL, error))
+    {
+      g_prefix_error (error, "module %s: ", name);
+      error = NULL; /* Don't report more errors */
+      res = FALSE;
+    }
+
+  return res;
+}
+
 
 GFile *
 builder_context_get_ccache_dir (BuilderContext *self)
