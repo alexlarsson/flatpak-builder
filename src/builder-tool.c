@@ -36,10 +36,34 @@
 
 static gboolean opt_verbose;
 static gboolean opt_version;
+static gboolean opt_all;
+static char *opt_arch;
+static char *opt_start_at;
+static char *opt_start_after;
+static char *opt_stop_at;
+static char *opt_stop_after;
 
 static GOptionEntry main_entries[] = {
   { "verbose", 'v', 0, G_OPTION_ARG_NONE, &opt_verbose, "Print debug information during command processing", NULL },
   { "version", 0, 0, G_OPTION_ARG_NONE, &opt_version, "Print version information and exit", NULL },
+  { NULL }
+};
+
+static GOptionEntry context_entries[] = {
+  { "arch", 0, 0, G_OPTION_ARG_STRING, &opt_arch, "Architecture to apply for", "ARCH" },
+  { NULL }
+};
+
+static GOptionEntry selection_entries[] = {
+  { "start-at", 0, 0, G_OPTION_ARG_STRING, &opt_start_at, "Start at this module", "MODULENAME"},
+  { "start-after", 0, 0, G_OPTION_ARG_STRING, &opt_start_after, "Start after this module", "MODULENAME"},
+  { "stop-at", 0, 0, G_OPTION_ARG_STRING, &opt_stop_at, "Stop at this module", "MODULENAME"},
+  { "stop-after", 0, 0, G_OPTION_ARG_STRING, &opt_stop_after, "Stop after this module", "MODULENAME"},
+  { NULL }
+};
+
+static GOptionEntry modules_entries[] = {
+  { "all", 0, 0, G_OPTION_ARG_NONE, &opt_all, "List all (not just enabled) modules"},
   { NULL }
 };
 
@@ -74,15 +98,6 @@ usage (GOptionContext *context,
   return 1;
 }
 
-typedef struct {
-  const char *name;
-  int (*main)(GOptionContext *context,
-              int argc,
-              char **argv);
-  const char *usage;
-  GOptionEntry *extra_entries;
-} CommandData;
-
 static int
 json (GOptionContext *context,
       int argc,
@@ -111,6 +126,98 @@ json (GOptionContext *context,
   return 0;
 }
 
+static BuilderContext *
+get_build_context (void)
+{
+  g_autoptr(BuilderContext) build_context = NULL;
+
+  build_context = builder_context_new (NULL, NULL);
+  builder_context_set_use_rofiles (build_context, FALSE);
+  if (opt_arch)
+    builder_context_set_arch (build_context, opt_arch);
+
+  return g_steal_pointer (&build_context);
+}
+
+static int
+modules (GOptionContext *context,
+         int argc,
+         char **argv)
+{
+  g_autoptr(GFile) manifest_file = NULL;
+  g_autoptr(BuilderManifest) manifest = NULL;
+  g_autoptr(GError) error = NULL;
+  g_autofree char *json = NULL;
+  g_autoptr(BuilderContext) build_context = NULL;
+  g_autoptr(GList) modules = NULL;
+  gboolean found_start = FALSE;
+  GList *l;
+
+  if (argc < 2)
+    return usage (context, "Must specify a manifest file");
+
+  manifest_file = g_file_new_for_path (argv[1]);
+
+  manifest = builder_manifest_load (manifest_file, &error);
+  if (manifest == NULL)
+    {
+      g_printerr ("Error loading '%s': %s\n", argv[1], error->message);
+      return 1;
+    }
+
+  build_context = get_build_context ();
+  if (opt_all)
+    modules = builder_manifest_get_all_modules (manifest);
+  else
+    modules = builder_manifest_get_enabled_modules (manifest, build_context);
+
+  for (l = modules; l != NULL; l = l->next)
+    {
+      BuilderModule *m = l->data;
+      const char *name = builder_module_get_name (m);
+
+      if (opt_start_at != NULL && !found_start)
+        {
+          if (strcmp (name, opt_start_at) == 0)
+            found_start = TRUE;
+          else
+            continue;
+        }
+
+      if (opt_start_after != NULL && !found_start)
+        {
+          if (strcmp (name, opt_start_after) == 0)
+            found_start = TRUE;
+          continue;
+        }
+
+      if (opt_stop_at != NULL && strcmp (name, opt_stop_at) == 0)
+        break;
+
+      g_print ("%s\n", name);
+
+      if (opt_stop_after != NULL && strcmp (name, opt_stop_after) == 0)
+        break;
+    }
+
+  return 0;
+}
+
+typedef struct {
+  const char *name;
+  int (*main)(GOptionContext *context,
+              int argc,
+              char **argv);
+  const char *usage;
+  GOptionEntry *extra_entries[4];
+} CommandData;
+
+static CommandData commands[] = {
+  { "json", json, "json FILE", {} },
+  { "modules", modules, "modules FILE", { context_entries, selection_entries, modules_entries } },
+  { NULL, NULL, NULL, {}}
+};
+
 int
 main (int    argc,
       char **argv)
@@ -120,10 +227,6 @@ main (int    argc,
   g_autoptr(BuilderManifest) manifest = NULL;
   g_autoptr(GOptionContext) context = NULL;
   int i, first_non_arg;
-  CommandData commands[] = {
-    { "json", json, "json FILE", NULL },
-    { NULL }
-  };
   CommandData *command = NULL;
   const char *command_name = NULL;
 
@@ -183,7 +286,10 @@ main (int    argc,
        return usage (context, "Unknown command %s", command_name);
 
   if (command && command->extra_entries)
-    g_option_context_add_main_entries (context, command->extra_entries, NULL);
+    {
+      for (i = 0; i < G_N_ELEMENTS (command->extra_entries) && command->extra_entries[i] != NULL; i++)
+        g_option_context_add_main_entries (context, command->extra_entries[i], NULL);
+    }
 
   if (!g_option_context_parse (context, &argc, &argv, &error))
     {

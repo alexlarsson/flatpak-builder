@@ -61,6 +61,7 @@ BuilderModule * builder_manifest_get_module (BuilderManifest *self,
                                              const char *name);
 GList *         builder_manifest_get_enabled_modules (BuilderManifest *self,
                                                       BuilderContext  *context);
+GList *         builder_manifest_get_all_modules (BuilderManifest *self);
 GList *         builder_manifest_get_add_extensions (BuilderManifest *self);
 GList *         builder_manifest_get_add_build_extensions (BuilderManifest *self);
 const char *    builder_manifest_get_branch (BuilderManifest *self);

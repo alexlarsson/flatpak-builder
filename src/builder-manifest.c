@@ -1626,7 +1626,9 @@ builder_manifest_get_module (BuilderManifest *self,
 }
 
 static GList *
-get_enabled_modules (BuilderContext *context, GList *modules)
+get_enabled_modules (BuilderContext *context,
+                     GList *modules,
+                     gboolean force_all)
 {
   GList *enabled = NULL;
   GList *l;
@@ -1636,10 +1638,10 @@ get_enabled_modules (BuilderContext *context, GList *modules)
       BuilderModule *m = l->data;
       GList *submodules = NULL;
 
-      if (!builder_module_is_enabled (m, context))
+      if (!force_all && !builder_module_is_enabled (m, context))
         continue;
 
-      submodules = get_enabled_modules (context, builder_module_get_modules (m));
+      submodules = get_enabled_modules (context, builder_module_get_modules (m), force_all);
 
       enabled = g_list_concat (enabled, submodules);
       enabled = g_list_append (enabled, m);
@@ -1651,7 +1653,13 @@ GList *
 builder_manifest_get_enabled_modules (BuilderManifest *self,
                                       BuilderContext  *context)
 {
-  return get_enabled_modules (context, self->modules);
+  return get_enabled_modules (context, self->modules, FALSE);
+}
+
+GList *
+builder_manifest_get_all_modules (BuilderManifest *self)
+{
+  return get_enabled_modules (NULL, self->modules, TRUE);
 }
 
 void
