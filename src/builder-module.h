@@ -48,6 +48,8 @@ typedef enum {
 
 GType builder_module_get_type (void);
 
+char * builder_module_serialize (BuilderModule *self);
+
 const char * builder_module_get_name (BuilderModule *self);
 gboolean     builder_module_is_enabled (BuilderModule *self,
                                         BuilderContext *context);

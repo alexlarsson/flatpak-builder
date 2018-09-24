@@ -2089,3 +2089,21 @@ builder_module_cleanup_collect (BuilderModule  *self,
         }
     }
 }
+
+char *
+builder_module_serialize (BuilderModule *self)
+{
+  JsonNode *node;
+  JsonGenerator *generator;
+  char *json;
+
+  node = json_gobject_serialize (G_OBJECT (self));
+  generator = json_generator_new ();
+  json_generator_set_pretty (generator, TRUE);
+  json_generator_set_root (generator, node);
+  json = json_generator_to_data (generator, NULL);
+  g_object_unref (generator);
+  json_node_free (node);
+
+  return json;
+}
