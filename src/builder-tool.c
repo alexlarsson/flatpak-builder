@@ -42,6 +42,7 @@ static char *opt_start_at;
 static char *opt_start_after;
 static char *opt_stop_at;
 static char *opt_stop_after;
+static char *opt_appdir;
 
 static GOptionEntry main_entries[] = {
   { "verbose", 'v', 0, G_OPTION_ARG_NONE, &opt_verbose, "Print debug information during command processing", NULL },
@@ -64,6 +65,11 @@ static GOptionEntry selection_entries[] = {
 
 static GOptionEntry modules_entries[] = {
   { "all", 0, 0, G_OPTION_ARG_NONE, &opt_all, "List all (not just enabled) modules"},
+  { NULL }
+};
+
+static GOptionEntry build_entries[] = {
+  { "appdir", 0, 0, G_OPTION_ARG_FILENAME, &opt_appdir, "Build in this appdir"},
   { NULL }
 };
 
@@ -130,8 +136,12 @@ static BuilderContext *
 get_build_context (void)
 {
   g_autoptr(BuilderContext) build_context = NULL;
+  g_autoptr(GFile) app_dir = NULL;
 
-  build_context = builder_context_new (NULL, NULL);
+  if (opt_appdir)
+    app_dir = g_file_new_for_path (opt_appdir);
+
+  build_context = builder_context_new (app_dir, NULL);
   builder_context_set_use_rofiles (build_context, FALSE);
   if (opt_arch)
     builder_context_set_arch (build_context, opt_arch);
@@ -147,7 +157,6 @@ modules (GOptionContext *context,
   g_autoptr(GFile) manifest_file = NULL;
   g_autoptr(BuilderManifest) manifest = NULL;
   g_autoptr(GError) error = NULL;
-  g_autofree char *json = NULL;
   g_autoptr(BuilderContext) build_context = NULL;
   g_autoptr(GList) modules = NULL;
   gboolean found_start = FALSE;
@@ -203,6 +212,117 @@ modules (GOptionContext *context,
   return 0;
 }
 
+static int
+module (GOptionContext *context,
+              int argc,
+              char **argv)
+{
+  g_autoptr(GFile) manifest_file = NULL;
+  g_autoptr(BuilderManifest) manifest = NULL;
+  g_autoptr(GError) error = NULL;
+  g_autofree char *json = NULL;
+  BuilderModule *module;
+
+  if (argc < 2)
+    return usage (context, "Must specify a manifest file");
+
+  if (argc < 3)
+    return usage (context, "Must specify a module file");
+
+  manifest_file = g_file_new_for_path (argv[1]);
+
+  manifest = builder_manifest_load (manifest_file, &error);
+  if (manifest == NULL)
+    {
+      g_printerr ("Error loading '%s': %s\n", argv[1], error->message);
+      return 1;
+    }
+
+  module = builder_manifest_get_module (manifest, argv[2]);
+  if (module == NULL)
+    {
+      g_printerr ("Error: No module named '%s'\n", argv[2]);
+      return 1;
+    }
+
+  json = builder_module_serialize (module);
+  g_print ("%s\n", json);
+
+  return 0;
+}
+
+
+static int
+build_module (GOptionContext *option_context,
+              int argc,
+              char **argv)
+{
+  g_autoptr(GFile) manifest_file = NULL;
+  g_autoptr(BuilderManifest) manifest = NULL;
+  g_autoptr(BuilderContext) context = NULL;
+  g_autoptr(GError) error = NULL;
+  g_autoptr(GFile) build_dir = NULL;
+  BuilderModule *module;
+
+  if (argc < 2)
+    return usage (option_context, "Must specify a manifest file");
+
+  if (argc < 3)
+    return usage (option_context, "Must specify a module file");
+
+  manifest_file = g_file_new_for_path (argv[1]);
+
+  manifest = builder_manifest_load (manifest_file, &error);
+  if (manifest == NULL)
+    {
+      g_printerr ("Error loading '%s': %s\n", argv[1], error->message);
+      return 1;
+    }
+
+  module = builder_manifest_get_module (manifest, argv[2]);
+  if (module == NULL)
+    {
+      g_printerr ("Error: No module named '%s'\n", argv[2]);
+      return 1;
+    }
+
+  context = get_build_context ();
+
+  if (!builder_module_download_sources (module, TRUE, context, &error))
+    {
+      g_printerr ("Error: '%s'\n", error->message);
+      return 1;
+    }
+
+  build_dir = builder_context_allocate_build_subdir (context, argv[2], &error);
+  if (build_dir == NULL)
+    {
+      g_printerr ("Error: '%s'\n", error->message);
+      return 1;
+    }
+
+  if (!builder_module_extract_sources (module, build_dir, context, &error))
+    {
+      g_printerr ("Error: '%s'\n", error->message);
+      return 1;
+    }
+
+  if (!builder_module_configure (module, context, build_dir, &error))
+    {
+      g_printerr ("Error: '%s'\n", error->message);
+      return 1;
+    }
+
+  if (!builder_module_build (module, context, build_dir, &error))
+    {
+      g_printerr ("Error: '%s'\n", error->message);
+      return 1;
+    }
+
+  return 0;
+}
+
+
 typedef struct {
   const char *name;
   int (*main)(GOptionContext *context,
@@ -215,6 +335,8 @@ typedef struct {
 static CommandData commands[] = {
   { "json", json, "json FILE", {} },
   { "modules", modules, "modules FILE", { context_entries, selection_entries, modules_entries } },
+  { "module", module, "modules FILE MODULE", { } },
+  { "build-module", build_module, "modules FILE MODULE", { context_entries, build_entries  } },
   { NULL, NULL, NULL, {}}
 };
 
