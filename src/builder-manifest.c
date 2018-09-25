@@ -31,7 +31,6 @@
 #include "builder-manifest-private.h"
 #include "builder-utils.h"
 #include "builder-flatpak-utils.h"
-#include "builder-post-process.h"
 #include "builder-extension.h"
 #include "builder-checksum.h"
 

@@ -27,7 +27,6 @@
 #include <gio/gio.h>
 #include <gio/gunixfdlist.h>
 #include <libsoup/soup.h>
-#include <ostree.h>
 #include <json-glib/json-glib.h>
 #include <curl/curl.h>
 
@@ -256,6 +255,8 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC (BuilderObjectList, builder_object_list_destroy)
 
 #define AUTOLOCK(name) G_GNUC_UNUSED __attribute__((cleanup (flatpak_auto_unlock_helper))) GMutex * G_PASTE (auto_unlock, __LINE__) = flatpak_auto_lock_helper (&G_LOCK_NAME (name))
 
+#ifdef OSTREE_DIRMETA_GVARIANT_FORMAT
+
 /* OSTREE_CHECK_VERSION was added immediately after the 2017.3 release */
 #ifndef OSTREE_CHECK_VERSION
 #define OSTREE_CHECK_VERSION(year, minor) (0)
@@ -271,6 +272,10 @@ G_DEFINE_AUTOPTR_CLEANUP_FUNC (OstreeAsyncProgress, g_object_unref)
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (OstreeGpgVerifyResult, g_object_unref)
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (OstreeRepoCommitModifier, ostree_repo_commit_modifier_unref)
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (OstreeRepoDevInoCache, ostree_repo_devino_cache_unref)
+#endif
+
+#else
+#define OSTREE_TIMESTAMP (0)
 #endif
 
 #if !defined(SOUP_AUTOCLEANUPS_H) && !defined(__SOUP_AUTOCLEANUPS_H__)

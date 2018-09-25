@@ -22,7 +22,6 @@
 #define __BUILDER_OPTIONS_H__
 
 #include <json-glib/json-glib.h>
-#include "builder-cache.h"
 #include "builder-types.h"
 
 G_BEGIN_DECLS

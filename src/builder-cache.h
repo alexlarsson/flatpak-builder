@@ -23,7 +23,7 @@
 
 #include <gio/gio.h>
 #include <libglnx/libglnx.h>
-
+#include <ostree.h>
 #include "builder-types.h"
 
 G_BEGIN_DECLS

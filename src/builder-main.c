@@ -30,6 +30,7 @@
 #include "libglnx/libglnx.h"
 
 #include "builder-flatpak-utils.h"
+#include "builder-cache.h"
 #include "builder-manifest.h"
 #include "builder-utils.h"
 #include "builder-git.h"

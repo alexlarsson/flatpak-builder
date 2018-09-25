@@ -34,7 +34,6 @@
 #include "builder-flatpak-utils.h"
 #include "builder-utils.h"
 #include "builder-module-private.h"
-#include "builder-post-process.h"
 #include "builder-manifest-private.h"
 #include "builder-checksum.h"
 

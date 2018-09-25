@@ -34,7 +34,6 @@
 #include <glib/gi18n.h>
 #include "builder-flatpak-utils.h"
 #include "builder-context.h"
-#include "builder-cache.h"
 #include "builder-utils.h"
 
 struct BuilderContext
