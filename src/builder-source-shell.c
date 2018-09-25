@@ -30,6 +30,7 @@
 #include "builder-flatpak-utils.h"
 #include "builder-utils.h"
 #include "builder-source-shell.h"
+#include "builder-manifest.h"
 #include "builder-checksum.h"
 
 struct BuilderSourceShell
@@ -120,49 +121,22 @@ run_script (BuilderManifest *manifest,
             const gchar    *script,
             GError        **error)
 {
-  GFile *app_dir = builder_context_get_app_dir (context);
-  g_autoptr(GPtrArray) args = NULL;
   g_autofree char *source_dir_path = g_file_get_path (source_dir);
-  g_autofree char *source_dir_path_canonical = NULL;
-  g_autoptr(GFile) source_dir_path_canonical_file = NULL;
   g_auto(GStrv) build_args = NULL;
-  g_auto(GStrv) env = NULL;
-  int i;
+  g_auto(GStrv) env_vars = NULL;
+  const char *args[] = { "/bin/sh", "-c", "ARG", NULL};
 
-  env = builder_options_get_env (build_options, manifest, context);
-
-  args = g_ptr_array_new_with_free_func (g_free);
-  g_ptr_array_add (args, g_strdup ("flatpak"));
-  g_ptr_array_add (args, g_strdup ("build"));
-  g_ptr_array_add (args, g_strdup ("--die-with-parent"));
-
-  source_dir_path_canonical = realpath (source_dir_path, NULL);
-
-  g_ptr_array_add (args, g_strdup ("--nofilesystem=host"));
-  g_ptr_array_add (args, g_strdup_printf ("--filesystem=%s", source_dir_path_canonical));
-
-  if (env)
-    {
-      for (i = 0; env[i] != NULL; i++)
-        g_ptr_array_add (args, g_strdup_printf ("--env=%s", env[i]));
-    }
+  env_vars = builder_options_get_env (build_options, manifest, context);
 
   build_args = builder_options_get_build_args (build_options, manifest, context, error);
   if (build_args == NULL)
     return FALSE;
 
-  for (i = 0; build_args[i] != NULL; i++)
-    g_ptr_array_add (args, g_strdup (build_args[i]));
+  args[2] = script;
 
-  g_ptr_array_add (args, g_file_get_path (app_dir));
-  g_ptr_array_add (args, g_strdup ("/bin/sh"));
-  g_ptr_array_add (args, g_strdup ("-c"));
-  g_ptr_array_add (args, g_strdup (script));
-  g_ptr_array_add (args, NULL);
-
-  source_dir_path_canonical_file = g_file_new_for_path (source_dir_path_canonical);
-
-  return builder_maybe_host_spawnv (source_dir_path_canonical_file, NULL, 0, error, (const char * const *)args->pdata);
+  return builder_context_spawnv (context, source_dir, NULL, NULL,
+                                 build_args, env_vars, (const char * const *)args,
+                                 error);
 }
 
 
