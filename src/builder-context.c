@@ -1132,6 +1132,40 @@ builder_context_spawnv (BuilderContext  *context,
   g_autoptr(GPtrArray) args = NULL;
   int i;
 
+  if (context->app_dir == NULL)
+    {
+      g_auto(GStrv) env = NULL;
+      g_autofree char *builddir = NULL;
+      gint exit_status;
+
+      if (source_subdir)
+        cwd_file = g_file_resolve_relative_path (source_dir, source_subdir);
+      else
+        cwd_file = g_object_ref (source_dir);
+
+      env = g_get_environ ();
+
+      env = g_environ_setenv (env, "FLATPAK_BUILDER_BUILDDIR", flatpak_file_get_path_cached (cwd_file), TRUE);
+      if (env_vars)
+        {
+          for (i = 0; env_vars[i] != NULL; i++)
+            {
+              g_auto(GStrv) s = g_strsplit (env_vars[i], "=", 2);
+              env = g_environ_setenv (env, s[0], s[1], TRUE);
+            }
+        }
+
+      if (!g_spawn_sync (flatpak_file_get_path_cached (cwd_file),
+                         (char **)argv, env, G_SPAWN_SEARCH_PATH,
+                         NULL, NULL, NULL, NULL, &exit_status, error))
+        return FALSE;
+
+      if (!g_spawn_check_exit_status (exit_status, error))
+        return FALSE;
+
+      return TRUE;
+    }
+
   args = setup_build_args (context, source_dir, source_subdir, source_dir_alias, flatpak_opts, env_vars, &cwd_file);
   for (i = 0; argv[i] != NULL; i++)
     g_ptr_array_add (args, g_strdup (argv[i]));
