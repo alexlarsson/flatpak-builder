@@ -43,6 +43,8 @@ static char *opt_start_after;
 static char *opt_stop_at;
 static char *opt_stop_after;
 static char *opt_appdir;
+static gboolean opt_disable_updates;
+static gboolean opt_disable_download;
 
 static GOptionEntry main_entries[] = {
   { "verbose", 'v', 0, G_OPTION_ARG_NONE, &opt_verbose, "Print debug information during command processing", NULL },
@@ -70,6 +72,8 @@ static GOptionEntry modules_entries[] = {
 
 static GOptionEntry build_entries[] = {
   { "appdir", 0, 0, G_OPTION_ARG_FILENAME, &opt_appdir, "Build in this appdir"},
+  { "disable-download", 0, 0, G_OPTION_ARG_NONE, &opt_disable_download, "Don't download any new sources", NULL },
+  { "disable-updates", 0, 0, G_OPTION_ARG_NONE, &opt_disable_updates, "Only download missing sources, never update to latest vcs version", NULL },
   { NULL }
 };
 
@@ -214,8 +218,8 @@ modules (GOptionContext *context,
 
 static int
 module (GOptionContext *context,
-              int argc,
-              char **argv)
+        int argc,
+        char **argv)
 {
   g_autoptr(GFile) manifest_file = NULL;
   g_autoptr(BuilderManifest) manifest = NULL;
@@ -251,6 +255,32 @@ module (GOptionContext *context,
   return 0;
 }
 
+static gboolean
+do_build (BuilderModule *module,
+          BuilderContext *context,
+          GError **error)
+{
+  g_autoptr(GFile) build_dir = NULL;
+  const char *name = builder_module_get_name (module);
+
+  build_dir = builder_context_allocate_build_subdir (context, name, error);
+  if (build_dir == NULL)
+    return FALSE;
+
+  if (!builder_module_extract_sources (module, build_dir, context, error))
+    return FALSE;
+
+  if (!builder_module_configure (module, context, build_dir, error))
+    return FALSE;
+
+  if (!builder_module_build (module, context, build_dir, error))
+    return FALSE;
+
+  if (!builder_context_delete_build_dir (context, build_dir, name, error))
+    return FALSE;
+
+  return TRUE;
+}
 
 static int
 build_module (GOptionContext *option_context,
@@ -288,32 +318,14 @@ build_module (GOptionContext *option_context,
 
   context = get_build_context ();
 
-  if (!builder_module_download_sources (module, TRUE, context, &error))
+  if (!opt_disable_download &&
+      !builder_module_download_sources (module, !opt_disable_updates, context, &error))
     {
       g_printerr ("Error: '%s'\n", error->message);
       return 1;
     }
 
-  build_dir = builder_context_allocate_build_subdir (context, argv[2], &error);
-  if (build_dir == NULL)
-    {
-      g_printerr ("Error: '%s'\n", error->message);
-      return 1;
-    }
-
-  if (!builder_module_extract_sources (module, build_dir, context, &error))
-    {
-      g_printerr ("Error: '%s'\n", error->message);
-      return 1;
-    }
-
-  if (!builder_module_configure (module, context, build_dir, &error))
-    {
-      g_printerr ("Error: '%s'\n", error->message);
-      return 1;
-    }
-
-  if (!builder_module_build (module, context, build_dir, &error))
+  if (!do_build (module, context, &error))
     {
       g_printerr ("Error: '%s'\n", error->message);
       return 1;
@@ -322,6 +334,78 @@ build_module (GOptionContext *option_context,
   return 0;
 }
 
+
+static int
+build (GOptionContext *option_context,
+              int argc,
+              char **argv)
+{
+  g_autoptr(GFile) manifest_file = NULL;
+  g_autoptr(BuilderManifest) manifest = NULL;
+  g_autoptr(BuilderContext) context = NULL;
+  g_autoptr(GError) error = NULL;
+  g_autoptr(GList) modules = NULL;
+  gboolean found_start = FALSE;
+  GList *l;
+
+  if (argc < 2)
+    return usage (option_context, "Must specify a manifest file");
+
+  manifest_file = g_file_new_for_path (argv[1]);
+
+  manifest = builder_manifest_load (manifest_file, &error);
+  if (manifest == NULL)
+    {
+      g_printerr ("Error loading '%s': %s\n", argv[1], error->message);
+      return 1;
+    }
+
+  context = get_build_context ();
+
+  modules = builder_manifest_get_enabled_modules (manifest, context);
+
+  for (l = modules; l != NULL; l = l->next)
+    {
+      BuilderModule *module = l->data;
+      const char *name = builder_module_get_name (module);
+
+      if (opt_start_at != NULL && !found_start)
+        {
+          if (strcmp (name, opt_start_at) == 0)
+            found_start = TRUE;
+          else
+            continue;
+        }
+
+      if (opt_start_after != NULL && !found_start)
+        {
+          if (strcmp (name, opt_start_after) == 0)
+            found_start = TRUE;
+          continue;
+        }
+
+      if (opt_stop_at != NULL && strcmp (name, opt_stop_at) == 0)
+        break;
+
+      if (!opt_disable_download &&
+          !builder_module_download_sources (module, !opt_disable_updates, context, &error))
+        {
+          g_printerr ("Error: '%s'\n", error->message);
+          return 1;
+        }
+
+      if (!do_build (module, context, &error))
+        {
+          g_printerr ("Error: '%s'\n", error->message);
+          return 1;
+        }
+
+      if (opt_stop_after != NULL && strcmp (name, opt_stop_after) == 0)
+        break;
+    }
+
+  return 0;
+}
 
 typedef struct {
   const char *name;
@@ -336,7 +420,8 @@ static CommandData commands[] = {
   { "json", json, "json FILE", {} },
   { "modules", modules, "modules FILE", { context_entries, selection_entries, modules_entries } },
   { "module", module, "modules FILE MODULE", { } },
-  { "build-module", build_module, "modules FILE MODULE", { context_entries, build_entries  } },
+  { "build-module", build_module, "build-module FILE MODULE", { context_entries, build_entries  } },
+  { "build", build, "build FILE", { context_entries, selection_entries, build_entries  } },
   { NULL, NULL, NULL, {}}
 };
 
