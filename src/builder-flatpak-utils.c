@@ -43,7 +43,6 @@
 #include <gio/gunixoutputstream.h>
 #include <gio/gunixinputstream.h>
 
-
 GFile *
 flatpak_file_new_tmp_in (GFile *dir,
                          const char *template,

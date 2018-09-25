@@ -38,17 +38,6 @@ AM_PROG_CC_C_O
 AC_PROG_CC_STDC
 AC_DISABLE_STATIC
 
-AC_CHECK_PROG([FLATPAK], [flatpak], [flatpak], [false])
-
-if test "x$FLATPAK" = xfalse; then
-   AC_MSG_ERROR([You need flatpak installed])
-else
-   FLATPAK_VERSION=`$FLATPAK --version | sed 's,.*\ \([0-9]*\.[0-9]*\.[0-9]*\)$,\1,'`
-   AX_COMPARE_VERSION([$FLATPAK_REQS],[gt],[$FLATPAK_VERSION],
-                      [AC_MSG_ERROR([You need at least version $FLATPAK_REQS of flatpak, your version is $FLATPAK_VERSION])])
-fi
-
-
 LT_PREREQ([2.2.6])
 LT_INIT([disable-static])
 
@@ -95,8 +84,29 @@ AC_CHECK_FUNCS(fdwalk)
 AC_CHECK_HEADER([sys/xattr.h], [], [AC_MSG_ERROR([You must have sys/xattr.h from glibc])])
 AC_CHECK_HEADER([sys/capability.h], have_caps=yes, [AC_MSG_ERROR([sys/capability.h header not found])])
 
-PKG_CHECK_MODULES(BASE, [glib-2.0 >= $GLIB_REQS gio-2.0 gio-unix-2.0 libsoup-2.4 ostree-1 >= $OSTREE_REQS json-glib-1.0 libxml-2.0 >= 2.4 libcurl])
-PKG_CHECK_MODULES(OSTREE, [ostree-1 >= $OSTREE_REQS])
+PKG_CHECK_MODULES(BASE, [glib-2.0 >= $GLIB_REQS gio-2.0 gio-unix-2.0 libsoup-2.4 json-glib-1.0 libxml-2.0 >= 2.4 libcurl])
+
+AC_ARG_ENABLE([builder],
+              AC_HELP_STRING([--disable-builder],
+                             [Disable flatpak-builder]),
+              [],
+              [enable_builder=yes])
+
+if test "x$enable_builder" = "xyes"; then
+   PKG_CHECK_MODULES(OSTREE, [ostree-1 >= $OSTREE_REQS])
+   AC_CHECK_PROG([FLATPAK], [flatpak], [flatpak], [false])
+
+if test "x$FLATPAK" = xfalse; then
+   AC_MSG_ERROR([You need flatpak installed])
+else
+   FLATPAK_VERSION=`$FLATPAK --version | sed 's,.*\ \([0-9]*\.[0-9]*\.[0-9]*\)$,\1,'`
+   AX_COMPARE_VERSION([$FLATPAK_REQS],[gt],[$FLATPAK_VERSION],
+                      [AC_MSG_ERROR([You need at least version $FLATPAK_REQS of flatpak, your version is $FLATPAK_VERSION])])
+fi
+
+fi
+
+AM_CONDITIONAL(ENABLE_BUILDER, test "x$enable_builder" = "xyes")
 
 dnl ************************
 dnl *** check for libelf ***

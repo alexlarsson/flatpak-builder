@@ -1,5 +1,10 @@
+if ENABLE_BUILDER
 bin_PROGRAMS += \
 	flatpak-builder \
+	$(NULL)
+endif
+
+bin_PROGRAMS += \
 	flatpak-builder-tool \
 	$(NULL)
 
