@@ -1127,82 +1127,8 @@ builder_module_bundle_sources (BuilderModule  *self,
   return TRUE;
 }
 
-static GPtrArray *
-setup_build_args (GFile           *app_dir,
-                  const char      *module_name,
-                  BuilderManifest *manifest,
-                  BuilderContext  *context,
-                  GFile           *source_dir,
-                  const char      *cwd_subdir,
-                  char           **flatpak_opts,
-                  char           **env_vars,
-                  GFile          **cwd_file)
-{
-  g_autoptr(GPtrArray) args = NULL;
-  g_autofree char *source_dir_path = g_file_get_path (source_dir);
-  g_autofree char *source_dir_path_canonical = NULL;
-  g_autofree char *ccache_dir_path = NULL;
-  const char *builddir;
-  int i;
-
-  args = g_ptr_array_new_with_free_func (g_free);
-  g_ptr_array_add (args, g_strdup ("flatpak"));
-  g_ptr_array_add (args, g_strdup ("build"));
-  g_ptr_array_add (args, g_strdup ("--die-with-parent"));
-
-  source_dir_path_canonical = realpath (source_dir_path, NULL);
-  if (source_dir_path_canonical == NULL)
-    source_dir_path_canonical = g_strdup (source_dir_path);
-
-  if (builder_manifest_get_build_runtime (manifest))
-    builddir = "/run/build-runtime/";
-  else
-    builddir = "/run/build/";
-
-  g_ptr_array_add (args, g_strdup_printf ("--env=FLATPAK_BUILDER_BUILDDIR=%s%s", builddir, module_name));
-  g_ptr_array_add (args, g_strdup ("--nofilesystem=host"));
-
-  /* We mount the canonical location, because bind-mounts of symlinks don't really work */
-  g_ptr_array_add (args, g_strdup_printf ("--filesystem=%s", source_dir_path_canonical));
-
-  /* Also make sure the original path is available (if it was not canonical, in case something references that. */
-  if (strcmp (source_dir_path_canonical, source_dir_path) != 0)
-    g_ptr_array_add (args, g_strdup_printf ("--bind-mount=%s=%s", source_dir_path, source_dir_path_canonical));
-
-  g_ptr_array_add (args, g_strdup_printf ("--bind-mount=%s%s=%s", builddir, module_name, source_dir_path_canonical));
-  if (cwd_subdir)
-    g_ptr_array_add (args, g_strdup_printf ("--build-dir=%s%s/%s", builddir, module_name, cwd_subdir));
-  else
-    g_ptr_array_add (args, g_strdup_printf ("--build-dir=%s%s", builddir, module_name));
-
-  if (g_file_query_exists (builder_context_get_ccache_dir (context), NULL))
-    {
-      ccache_dir_path = g_file_get_path (builder_context_get_ccache_dir (context));
-      g_ptr_array_add (args, g_strdup_printf ("--bind-mount=/run/ccache=%s", ccache_dir_path));
-    }
-
-  if (flatpak_opts)
-    {
-      for (i = 0; flatpak_opts[i] != NULL; i++)
-        g_ptr_array_add (args, g_strdup (flatpak_opts[i]));
-    }
-
-  if (env_vars)
-    {
-      for (i = 0; env_vars[i] != NULL; i++)
-        g_ptr_array_add (args, g_strdup_printf ("--env=%s", env_vars[i]));
-    }
-
-  g_ptr_array_add (args, g_file_get_path (app_dir));
-
-  *cwd_file = g_file_new_for_path (source_dir_path_canonical);
-
-  return g_steal_pointer (&args);
-}
-
 static gboolean
-shell (GFile           *app_dir,
-       const char      *module_name,
+shell (const char      *module_name,
        BuilderManifest *manifest,
        BuilderContext  *context,
        GFile           *source_dir,
@@ -1211,22 +1137,19 @@ shell (GFile           *app_dir,
        char           **env_vars,
        GError         **error)
 {
-  g_autoptr(GFile) cwd_file = NULL;
-  g_autoptr(GPtrArray) args =
-    setup_build_args (app_dir, module_name, manifest, context, source_dir, cwd_subdir, flatpak_opts, env_vars, &cwd_file);
+  char *args[] = { "sh", NULL};
+  g_autofree char *source_dir_alias = NULL;
 
-  g_ptr_array_add (args, "sh");
-  g_ptr_array_add (args, NULL);
+  if (builder_manifest_get_build_runtime (manifest))
+    source_dir_alias = g_build_filename ("/run/build-runtime", module_name, NULL);
+  else
+    source_dir_alias = g_build_filename ("/run/build", module_name, NULL);
 
-  if (chdir (flatpak_file_get_path_cached (cwd_file)))
+  if (!builder_context_execv (context, source_dir, cwd_subdir, source_dir_alias,
+                              flatpak_opts, env_vars, (const char * const *)args,
+                              error))
     {
-      glnx_set_error_from_errno (error);
-      return FALSE;
-    }
-
-  if (execvp ((char *) args->pdata[0], (char **) args->pdata) == -1)
-    {
-      g_set_error (error, G_IO_ERROR, g_io_error_from_errno (errno), "Unable to start flatpak build");
+      g_prefix_error (error, "module %s: ", module_name);
       return FALSE;
     }
 
@@ -1237,8 +1160,7 @@ static const char skip_arg[] = "skip";
 static const char strv_arg[] = "strv";
 
 static gboolean
-build (GFile           *app_dir,
-       const char      *module_name,
+build (const char      *module_name,
        BuilderManifest *manifest,
        BuilderContext  *context,
        GFile           *source_dir,
@@ -1249,9 +1171,8 @@ build (GFile           *app_dir,
        const gchar     *argv1,
        ...)
 {
-  g_autoptr(GFile) cwd_file = NULL;
-  g_autoptr(GPtrArray) args =
-    setup_build_args (app_dir, module_name, manifest, context, source_dir, cwd_subdir, flatpak_opts, env_vars, &cwd_file);
+  g_autoptr(GPtrArray) args = g_ptr_array_new_with_free_func (g_free);
+  g_autofree char *source_dir_alias = NULL;
   const gchar *arg;
   const gchar **argv;
   va_list ap;
@@ -1276,10 +1197,16 @@ build (GFile           *app_dir,
         }
     }
   va_end (ap);
-
   g_ptr_array_add (args, NULL);
 
-  if (!builder_maybe_host_spawnv (cwd_file, NULL, 0, error, (const char * const *)args->pdata))
+  if (builder_manifest_get_build_runtime (manifest))
+    source_dir_alias = g_build_filename ("/run/build-runtime", module_name, NULL);
+  else
+    source_dir_alias = g_build_filename ("/run/build", module_name, NULL);
+
+  if (!builder_context_spawnv (context, source_dir, cwd_subdir, source_dir_alias,
+                               flatpak_opts, env_vars, (const char * const *)args->pdata,
+                               error))
     {
       g_prefix_error (error, "module %s: ", module_name);
       return FALSE;
@@ -1399,7 +1326,6 @@ builder_module_configure (BuilderModule  *self,
                           GFile          *source_dir,
                           GError        **error)
 {
-  GFile *app_dir = builder_context_get_app_dir (context);
   g_autofree char *make_j = NULL;
   g_autofree char *make_l = NULL;
   BuilderBuildsystem buildsystem;
@@ -1508,7 +1434,7 @@ builder_module_configure (BuilderModule  *self,
         }
 
       env_with_noconfigure = g_environ_setenv (g_strdupv (env), "NOCONFIGURE", "1", TRUE);
-      if (!build (app_dir, self->name, self->manifest, context, source_dir, source_subdir_relative, build_args, env_with_noconfigure, error,
+      if (!build (self->name, self->manifest, context, source_dir, source_subdir_relative, build_args, env_with_noconfigure, error,
                   autogen_cmd, NULL))
         {
           g_prefix_error (error, "module %s: ", self->name);
@@ -1619,7 +1545,7 @@ builder_module_configure (BuilderModule  *self,
 
       configure_args = (char **) g_ptr_array_free (g_steal_pointer (&configure_args_arr), FALSE);
 
-      if (!build (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error,
+      if (!build (self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error,
                   configure_cmd, strv_arg, configure_args, strv_arg, config_opts, NULL))
         return FALSE;
     }
@@ -1662,7 +1588,6 @@ builder_module_run_shell (BuilderModule  *self,
                           GFile          *source_dir,
                           GError        **error)
 {
-  GFile *app_dir = builder_context_get_app_dir (context);
   g_auto(GStrv) env = NULL;
   g_auto(GStrv) build_args = NULL;
   BuilderBuildsystem buildsystem;
@@ -1684,7 +1609,7 @@ builder_module_run_shell (BuilderModule  *self,
   if (build_args == NULL)
     return FALSE;
 
-  if (!shell (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error))
+  if (!shell (self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error))
     return FALSE;
   return TRUE;
 }
@@ -1741,7 +1666,7 @@ builder_module_build (BuilderModule  *self,
     {
       g_auto(GStrv) make_args = builder_options_get_make_args (self->build_options, self->manifest, context, self->make_args);
 
-      if (!build (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error,
+      if (!build (self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error,
                   make_cmd, make_j ? make_j : skip_arg, make_l ? make_l : skip_arg, strv_arg, make_args, NULL))
         return FALSE;
     }
@@ -1749,7 +1674,7 @@ builder_module_build (BuilderModule  *self,
   for (i = 0; self->build_commands != NULL && self->build_commands[i] != NULL; i++)
     {
       g_print ("Running: %s\n", self->build_commands[i]);
-      if (!build (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error,
+      if (!build (self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error,
                   "/bin/sh", "-c", self->build_commands[i], NULL))
         return FALSE;
     }
@@ -1759,7 +1684,7 @@ builder_module_build (BuilderModule  *self,
   if (!self->no_make_install && make_cmd)
     {
       g_auto(GStrv) make_install_args = builder_options_get_make_install_args (self->build_options, self->manifest, context, self->make_install_args);
-      if (!build (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error,
+      if (!build (self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error,
                   make_cmd, self->install_rule ? self->install_rule : "install",
                   strv_arg, make_install_args, NULL))
         return FALSE;
@@ -1789,7 +1714,7 @@ builder_module_build (BuilderModule  *self,
     {
       for (i = 0; self->post_install[i] != NULL; i++)
         {
-          if (!build (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error,
+          if (!build (self->name, self->manifest, context, source_dir, build_dir_relative, build_args, env, error,
                       "/bin/sh", "-c", self->post_install[i], NULL))
             return FALSE;
         }
@@ -1804,7 +1729,6 @@ builder_module_run_tests (BuilderModule  *self,
                           GFile          *source_dir,
                           GError        **error)
 {
-  GFile *app_dir = builder_context_get_app_dir (context);
   g_auto(GStrv) test_args = NULL;
   const char *make_cmd = NULL;
   const char *test_arg = NULL;
@@ -1845,7 +1769,7 @@ builder_module_run_tests (BuilderModule  *self,
 
   if (make_cmd && test_arg && *test_arg != 0)
     {
-      if (!build (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, test_args, env, error,
+      if (!build (self->name, self->manifest, context, source_dir, build_dir_relative, test_args, env, error,
                   make_cmd, test_arg, NULL))
         {
           g_prefix_error (error, "Running %s %s failed: ", make_cmd, test_arg);
@@ -1856,7 +1780,7 @@ builder_module_run_tests (BuilderModule  *self,
   for (i = 0; self->test_commands != NULL && self->test_commands[i] != NULL; i++)
     {
       g_print ("Running: %s\n", self->test_commands[i]);
-      if (!build (app_dir, self->name, self->manifest, context, source_dir, build_dir_relative, test_args, env, error,
+      if (!build (self->name, self->manifest, context, source_dir, build_dir_relative, test_args, env, error,
                   "/bin/sh", "-c", self->test_commands[i], NULL))
         {
           g_prefix_error (error, "Running test command '%s' failed: ", self->test_commands[i]);

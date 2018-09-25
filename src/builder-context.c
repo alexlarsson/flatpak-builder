@@ -1043,3 +1043,134 @@ builder_context_new (GFile *app_dir,
                        "state-subdir", state_subdir,
                        NULL);
 }
+
+static GPtrArray *
+setup_build_args (BuilderContext  *context,
+                  GFile           *source_dir,
+                  const char      *cwd_subdir,
+                  const char      *source_dir_alias,
+                  char           **flatpak_opts,
+                  char           **env_vars,
+                  GFile          **cwd_file)
+{
+  GFile *app_dir = builder_context_get_app_dir (context);
+  g_autoptr(GPtrArray) args = NULL;
+  g_autofree char *source_dir_path = g_file_get_path (source_dir);
+  g_autofree char *source_dir_path_canonical = NULL;
+  g_autofree char *ccache_dir_path = NULL;
+  const char *build_dir;
+  int i;
+
+  args = g_ptr_array_new_with_free_func (g_free);
+  g_ptr_array_add (args, g_strdup ("flatpak"));
+  g_ptr_array_add (args, g_strdup ("build"));
+  g_ptr_array_add (args, g_strdup ("--die-with-parent"));
+  source_dir_path_canonical = realpath (source_dir_path, NULL);
+  if (source_dir_path_canonical == NULL)
+    source_dir_path_canonical = g_strdup (source_dir_path);
+
+
+  g_ptr_array_add (args, g_strdup ("--nofilesystem=host"));
+
+  /* We mount the canonical location, because bind-mounts of symlinks don't really work */
+  g_ptr_array_add (args, g_strdup_printf ("--filesystem=%s", source_dir_path_canonical));
+
+  /* Also make sure the original path is available (if it was not canonical, in case something references that. */
+  if (strcmp (source_dir_path_canonical, source_dir_path) != 0)
+    g_ptr_array_add (args, g_strdup_printf ("--bind-mount=%s=%s", source_dir_path, source_dir_path_canonical));
+
+  if (g_file_query_exists (builder_context_get_ccache_dir (context), NULL))
+    {
+      ccache_dir_path = g_file_get_path (builder_context_get_ccache_dir (context));
+      g_ptr_array_add (args, g_strdup_printf ("--bind-mount=/run/ccache=%s", ccache_dir_path));
+    }
+
+  if (source_dir_alias)
+    {
+      g_ptr_array_add (args, g_strdup_printf ("--bind-mount=%s=%s", source_dir_alias, source_dir_path_canonical));
+      build_dir = source_dir_alias;
+    }
+  else
+    build_dir = source_dir_path_canonical;
+
+  if (cwd_subdir)
+    g_ptr_array_add (args, g_strdup_printf ("--build-dir=%s/%s", build_dir, cwd_subdir));
+  else
+    g_ptr_array_add (args, g_strdup_printf ("--build-dir=%s", build_dir));
+
+  g_ptr_array_add (args, g_strdup_printf ("--env=FLATPAK_BUILDER_BUILDDIR=%s", build_dir));
+
+  if (flatpak_opts)
+    {
+      for (i = 0; flatpak_opts[i] != NULL; i++)
+        g_ptr_array_add (args, g_strdup (flatpak_opts[i]));
+    }
+
+  if (env_vars)
+    {
+      for (i = 0; env_vars[i] != NULL; i++)
+        g_ptr_array_add (args, g_strdup_printf ("--env=%s", env_vars[i]));
+    }
+
+  g_ptr_array_add (args, g_file_get_path (app_dir));
+
+  *cwd_file = g_file_new_for_path (source_dir_path_canonical);
+
+  return g_steal_pointer (&args);
+}
+
+gboolean
+builder_context_spawnv (BuilderContext  *context,
+                        GFile           *source_dir,
+                        const char      *source_subdir,
+                        const char      *source_dir_alias,
+                        char           **flatpak_opts,
+                        char           **env_vars,
+                        const gchar * const  *argv,
+                        GError         **error)
+{
+  g_autoptr(GFile) cwd_file = NULL;
+  g_autoptr(GPtrArray) args = NULL;
+  int i;
+
+  args = setup_build_args (context, source_dir, source_subdir, source_dir_alias, flatpak_opts, env_vars, &cwd_file);
+  for (i = 0; argv[i] != NULL; i++)
+    g_ptr_array_add (args, g_strdup (argv[i]));
+  g_ptr_array_add (args, NULL);
+
+  return builder_maybe_host_spawnv (cwd_file, NULL, 0, error, (const char * const *)args->pdata);
+}
+
+gboolean
+builder_context_execv (BuilderContext  *context,
+                       GFile           *source_dir,
+                       const char      *source_subdir,
+                       const char      *source_dir_alias,
+                       char           **flatpak_opts,
+                       char           **env_vars,
+                       const gchar * const  *argv,
+                       GError         **error)
+{
+  g_autoptr(GFile) cwd_file = NULL;
+  g_autoptr(GPtrArray) args = NULL;
+  int i;
+
+  args = setup_build_args (context, source_dir, source_subdir, source_dir_alias, flatpak_opts, env_vars, &cwd_file);
+  for (i = 0; argv[i] != NULL; i++)
+    g_ptr_array_add (args, g_strdup (argv[i]));
+  g_ptr_array_add (args, NULL);
+
+  if (chdir (flatpak_file_get_path_cached (cwd_file)))
+    {
+      glnx_set_error_from_errno (error);
+      return FALSE;
+    }
+
+  if (execvp ((char *) args->pdata[0], (char **) args->pdata) == -1)
+    {
+      g_set_error (error, G_IO_ERROR, g_io_error_from_errno (errno), "Unable to start flatpak build");
+      return FALSE;
+    }
+
+  g_assert_not_reached ();
+}

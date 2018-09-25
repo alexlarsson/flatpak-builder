@@ -134,6 +134,25 @@ gboolean        builder_context_load_sdk_config (BuilderContext       *self,
 
 BuilderSdkConfig * builder_context_get_sdk_config (BuilderContext *self);
 
+
+gboolean        builder_context_spawnv (BuilderContext  *context,
+                                        GFile           *source_dir,
+                                        const char      *source_subdir,
+                                        const char      *source_dir_alias,
+                                        char           **flatpak_opts,
+                                        char           **env_vars,
+                                        const gchar * const  *argv,
+                                        GError         **error);
+
+gboolean        builder_context_execv (BuilderContext  *context,
+                                       GFile           *source_dir,
+                                       const char      *source_subdir,
+                                       const char      *source_dir_alias,
+                                       char           **flatpak_opts,
+                                       char           **env_vars,
+                                       const gchar * const  *argv,
+                                       GError         **error);
+
 G_DEFINE_AUTOPTR_CLEANUP_FUNC (BuilderContext, g_object_unref)
 
 G_END_DECLS
