@@ -102,6 +102,9 @@ gboolean builder_module_build (BuilderModule  *self,
                                BuilderContext *context,
                                GFile          *build_dir,
                                GError        **error);
+gboolean builder_module_separate_locales (BuilderModule  *self,
+                                          BuilderContext *context,
+                                          GError        **error);
 gboolean builder_module_run_tests (BuilderModule  *self,
                                    BuilderContext *context,
                                    GFile          *build_dir,

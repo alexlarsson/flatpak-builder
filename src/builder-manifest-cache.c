@@ -200,6 +200,10 @@ do_build_module_steps (BuilderManifest *self,
   if (!builder_module_build (module, context, build_dir, error))
     return FALSE;
 
+  if (builder_manifest_get_separate_locales (self) &&
+      !builder_module_separate_locales (module, context, error))
+    return FALSE;
+
   if (builder_context_get_run_tests (context) &&
       !builder_module_run_tests (module, context, build_dir, error))
     return FALSE;

@@ -1619,7 +1619,6 @@ builder_module_build (BuilderModule  *self,
                       GFile          *source_dir,
                       GError        **error)
 {
-  GFile *app_dir = builder_context_get_app_dir (context);
   g_auto(GStrv) env = NULL;
   g_auto(GStrv) build_args = NULL;
   g_autofree char *n_jobs = NULL;
@@ -1693,22 +1692,6 @@ builder_module_build (BuilderModule  *self,
 
   builder_set_term_title (_("Post-Install %s"), self->name);
 
-  if (builder_manifest_get_separate_locales (self->manifest))
-    {
-      g_autoptr(GFile) root_dir = NULL;
-
-      if (builder_manifest_get_build_runtime (self->manifest))
-        root_dir = g_file_get_child (app_dir, "usr");
-      else
-        root_dir = g_file_get_child (app_dir, "files");
-
-      if (!builder_migrate_locale_dirs (root_dir, error))
-        {
-          g_prefix_error (error, "module %s: ", self->name);
-          return FALSE;
-        }
-    }
-
   if (self->post_install)
     {
       for (i = 0; self->post_install[i] != NULL; i++)
@@ -1719,6 +1702,27 @@ builder_module_build (BuilderModule  *self,
         }
     }
 
+  return TRUE;
+}
+
+gboolean
+builder_module_separate_locales (BuilderModule  *self,
+                                 BuilderContext *context,
+                                 GError        **error)
+{
+  g_autoptr(GFile) root_dir = NULL;
+  GFile *app_dir = builder_context_get_app_dir (context);
+
+  if (builder_manifest_get_build_runtime (self->manifest))
+    root_dir = g_file_get_child (app_dir, "usr");
+  else
+    root_dir = g_file_get_child (app_dir, "files");
+
+  if (!builder_migrate_locale_dirs (root_dir, error))
+    {
+      g_prefix_error (error, "module %s: ", self->name);
+      return FALSE;
+    }
   return TRUE;
 }
 
